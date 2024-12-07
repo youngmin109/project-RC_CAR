@@ -29,7 +29,8 @@ current_speed = 0
 
 # 서보모터 각도 설정 함수
 def set_servo_angle(angle):
-    duty = 2 + (angle / 18)  # 각도를 듀티 사이클로 변환
+    # 각도를 듀티 사이클로 변환 (0도 = 2%, 180도 = 12%)
+    duty = 2 + (angle / 18)
     servo_pwm.ChangeDutyCycle(duty)
     time.sleep(0.1)
     servo_pwm.ChangeDutyCycle(0)  # 과열 방지
@@ -44,21 +45,13 @@ def motor_forward():
     dc_motor_pwm.ChangeDutyCycle(current_speed)
     print(f"전진: 속도 {current_speed}%")
 
-# DC 모터 후진 함수 (속도 증가)
-def motor_backward():
-    global current_speed
-    if current_speed < 100:
-        current_speed += 5
-    GPIO.output(IN1, GPIO.LOW)
-    GPIO.output(IN2, GPIO.HIGH)
-    dc_motor_pwm.ChangeDutyCycle(current_speed)
-    print(f"후진: 속도 {current_speed}%")
-
 # DC 모터 속도 감소 함수
 def motor_slow_down():
     global current_speed
     if current_speed > 0:
         current_speed -= 5
+    GPIO.output(IN1, GPIO.HIGH)
+    GPIO.output(IN2, GPIO.LOW)
     dc_motor_pwm.ChangeDutyCycle(current_speed)
     print(f"속도 감소: 속도 {current_speed}%")
 
@@ -83,8 +76,8 @@ def on_press(key):
     try:
         if key == keyboard.Key.up:  # 위쪽 방향키: DC 모터 전진 (속도 증가)
             motor_forward()
-        elif key == keyboard.Key.down:  # 아래쪽 방향키: DC 모터 후진 (속도 증가)
-            motor_backward()
+        elif key == keyboard.Key.down:  # 아래쪽 방향키: DC 모터 속도 감소
+            motor_slow_down()
         elif key == keyboard.Key.left:  # 왼쪽 방향키: 서보모터 왼쪽 회전
             current_angle = max(0, current_angle - ANGLE_INCREMENT)
             set_servo_angle(current_angle)
