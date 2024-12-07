@@ -139,7 +139,7 @@ def keyboard_listener():
 def camera_streaming():
     cmd = 'libcamera-vid --inline --nopreview -t 0 --codec mjpeg --width 640 --height 480 --framerate 30 -o - --camera 0'
     process = subprocess.Popen(shlex.split(cmd), stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    save_path = "/home/Image/"
+    save_path = "/home/Image"
     buffer = b""
     capture_interval = 1
     last_capture_time = time.time()
