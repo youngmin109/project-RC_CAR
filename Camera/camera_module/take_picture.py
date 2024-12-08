@@ -12,7 +12,7 @@ cmd = 'libcamera-vid --inline --nopreview -t 0 --codec mjpeg --width 640 --heigh
 process = subprocess.Popen(shlex.split(cmd), stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
 # 캡처 간격 및 시간 초기화
-capture_interval = 3
+capture_interval = 5
 last_capture_time = time.time()
 
 # OpenCV 창 설정
@@ -20,7 +20,7 @@ cv2.namedWindow('frame', cv2.WINDOW_NORMAL)
 cv2.resizeWindow('frame', 640, 360)
 
 # 절대 경로 설정
-save_path = "/home/jungmin/Desktop/cord/date/"
+save_path = "/home/pi/Image"
 
 # 테스트 이미지 저장
 test_image = np.zeros((480, 640, 3), dtype=np.uint8)  # 검은색 이미지 생성
