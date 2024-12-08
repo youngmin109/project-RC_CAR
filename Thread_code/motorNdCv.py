@@ -107,7 +107,9 @@ def on_press(key):
             if current_speed > 0:  # 속도가 있는 경우 속도를 줄임
                 motor_slow_down()
             else:  # 속도가 0인 경우 후진
-                motor_backward()
+                print("속도 0, 후진 시작")
+            current_speed = 5  # 후진을 위한 초기 속도 설정
+            motor_backward()
         elif key == keyboard.Key.left:  # 왼쪽 방향키: 서보모터 왼쪽 회전
             current_angle = max(0, current_angle - 5)
             set_servo_angle(current_angle)
@@ -139,7 +141,7 @@ def keyboard_listener():
 def camera_streaming():
     cmd = 'libcamera-vid --inline --nopreview -t 0 --codec mjpeg --width 640 --height 480 --framerate 30 -o - --camera 0'
     process = subprocess.Popen(shlex.split(cmd), stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    save_path = "/home/Image"
+    save_path = "/home/Image/"
     buffer = b""
     capture_interval = 1
     last_capture_time = time.time()
