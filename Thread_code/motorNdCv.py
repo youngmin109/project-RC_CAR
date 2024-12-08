@@ -66,14 +66,14 @@ def motor_forward():
     print(f"전진: 속도 {current_speed}%")
 
 # DC 모터 후진 함수 (속도 증가)
-def motor_backward():
-    global current_speed
-    if current_speed < 100:
-        current_speed += 5
-    GPIO.output(IN1, GPIO.LOW)
-    GPIO.output(IN2, GPIO.HIGH)
-    dc_motor_pwm.ChangeDutyCycle(current_speed)
-    print(f"후진: 속도 {current_speed}%")
+# def motor_backward():
+#     global current_speed
+#     if current_speed < 100:
+#         current_speed += 5
+#     GPIO.output(IN1, GPIO.LOW)
+#     GPIO.output(IN2, GPIO.HIGH)
+#     dc_motor_pwm.ChangeDutyCycle(current_speed)
+#     print(f"후진: 속도 {current_speed}%")
 
 # DC 모터 속도 감소 함수
 def motor_slow_down():
@@ -106,10 +106,10 @@ def on_press(key):
         elif key == keyboard.Key.down:  # 아래쪽 방향키: 속도 감소 또는 후진
             if current_speed > 0:  # 속도가 있는 경우 속도를 줄임
                 motor_slow_down()
-            else:  # 속도가 0인 경우 후진
-                print("속도 0, 후진 시작")
-            current_speed = 5  # 후진을 위한 초기 속도 설정
-            motor_backward()
+            # else:  # 속도가 0인 경우 후진
+            #     print("속도 0, 후진 시작")
+            # current_speed = 5  # 후진을 위한 초기 속도 설정
+            # motor_backward()
         elif key == keyboard.Key.left:  # 왼쪽 방향키: 서보모터 왼쪽 회전
             current_angle = max(0, current_angle - 5)
             set_servo_angle(current_angle)
