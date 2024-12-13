@@ -102,6 +102,13 @@ def camera_streaming():
                 print("카메라 프레임을 읽을 수 없습니다!")
                 break
 
+            # 전처리: 높이를 절반으로 잘라 저장
+            height, _, _ = frame.shape
+            save_image = frame[int(height / 2):, :, :]
+            save_image = cv2.cvtColor(save_image, cv2.COLOR_BGR2YUV)
+            save_image = cv2.GaussianBlur(save_image, (3, 3), 0)
+            save_image = cv2.resize(save_image, (200, 66))
+
             # 화면에 이미지 표시
             cv2.imshow('frame', frame)
 
@@ -119,7 +126,7 @@ def camera_streaming():
                 else:
                     filename = f"{save_path}unknown_{now}.jpg"
 
-                if cv2.imwrite(filename, frame):
+                if cv2.imwrite(filename, save_image):
                     print(f"이미지 저장 성공: {filename}")
                 else:
                     print(f"이미지 저장 실패: {filename}")
