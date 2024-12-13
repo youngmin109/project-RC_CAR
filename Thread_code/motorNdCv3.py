@@ -32,6 +32,7 @@ dc_motor_pwm.start(0)
 # 초기값 설정
 current_angle = 90
 current_speed = 0
+current_direction = "center"
 
 # 서보모터 각도 설정 함수
 def set_servo_angle(angle):
@@ -75,18 +76,22 @@ set_servo_angle(current_angle)
 
 # 키 입력 처리 함수
 def on_press(key):
-    global current_angle
+    global current_angle, current_direction
     try:
         if key == keyboard.Key.up:  # 위쪽 방향키: DC 모터 전진
             motor_forward()
+            current_direction = "forward"
         elif key == keyboard.Key.down:  # 아래쪽 방향키: DC 모터 속도 감소
             motor_slow_down()
+            current_direction = "backward"
         elif key == keyboard.Key.left:  # 왼쪽 방향키: 서보모터 왼쪽 회전
-            current_angle = max(0, current_angle - 5)
+            current_angle = max(45, current_angle - 45)
             set_servo_angle(current_angle)
+            current_direction = "left"
         elif key == keyboard.Key.right:  # 오른쪽 방향키: 서보모터 오른쪽 회전
-            current_angle = min(180, current_angle + 5)
+            current_angle = min(135, current_angle + 45)
             set_servo_angle(current_angle)
+            current_direction = "right"
         elif key == keyboard.Key.space:  # Space 키: 모터 정지
             motor_stop()
     except AttributeError:
@@ -95,6 +100,7 @@ def on_press(key):
 def on_release(key):
     if key == keyboard.Key.esc:
         print("프로그램 종료")
+        GPIO.cleanup()
         return False
 
 # 키보드 리스너 함수
@@ -110,7 +116,7 @@ def camera_streaming():
     process = subprocess.Popen(shlex.split(cmd), stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     save_path = "/home/pi/Image/"
     buffer = b""
-    capture_interval = 2  # 2초마다 캡처
+    capture_interval = 1  # 1초마다 캡처
     last_capture_time = time.time()
 
     cv2.namedWindow('frame', cv2.WINDOW_NORMAL)
@@ -135,14 +141,7 @@ def camera_streaming():
 
                     if current_time - last_capture_time >= capture_interval:
                         now = datetime.datetime.now().strftime('%y%m%d_%H%M%S')
-                        if current_angle == 45:
-                            image_name = f"left_{now}.jpg"
-                        elif current_angle == 90:
-                            image_name = f"center_{now}.jpg"
-                        elif current_angle == 135:
-                            image_name = f"right_{now}.jpg"
-                        else:
-                            image_name = f"unknown_{now}.jpg"
+                        image_name = f"{current_direction}_{now}.jpg"
 
                         if cv2.imwrite(save_path + image_name, frame):
                             print(f"이미지 저장 성공: {image_name}")
@@ -155,6 +154,7 @@ def camera_streaming():
     finally:
         process.terminate()
         cv2.destroyAllWindows()
+        GPIO.cleanup()
 
 # 스레드 실행
 keyboard_thread = threading.Thread(target=keyboard_listener, daemon=True)
