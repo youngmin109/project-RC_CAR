@@ -1,7 +1,9 @@
-import cv2
+import RPi.GPIO as GPIO
 import time
+import cv2
 import numpy as np
-import os
+import datetime
+import threading
 
 # GPIO 핀 설정
 SERVO_PIN = 12  # 서보모터 핀 번호
@@ -9,97 +11,138 @@ IN1 = 17        # DC 모터 IN1 핀 번호
 IN2 = 27        # DC 모터 IN2 핀 번호
 ENA = 18        # DC 모터 ENA 핀 번호
 
-# 카메라 설정
-class MyCamera:
-    def __init__(self, width, height):
-        self.width = width
-        self.height = height
-        self.camera = cv2.VideoCapture(0)  # 0번 카메라 사용
-        self.camera.set(cv2.CAP_PROP_FRAME_WIDTH, width)
-        self.camera.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
+# GPIO 모드 설정
+GPIO.setmode(GPIO.BCM)
+GPIO.setup(SERVO_PIN, GPIO.OUT)
+GPIO.setup(IN1, GPIO.OUT)
+GPIO.setup(IN2, GPIO.OUT)
+GPIO.setup(ENA, GPIO.OUT)
 
-    def isOpened(self):
-        return self.camera.isOpened()
+# PWM 설정
+servo_pwm = GPIO.PWM(SERVO_PIN, 50)  # 서보모터: 50Hz
+dc_motor_pwm = GPIO.PWM(ENA, 100)   # DC 모터: 100Hz
 
-    def read(self):
-        ret, frame = self.camera.read()
-        return ret, frame
+# PWM 시작
+servo_pwm.start(0)
+dc_motor_pwm.start(0)
 
-    def release(self):
-        self.camera.release()
+# 초기값 설정
+current_angle = 90
+current_speed = 0
 
-# 모터 관련 설정 함수(placeholder)
-def motor_go(speed):
-    print(f"모터 전진, 속도: {speed}")
+# 서보모터 각도 설정 함수
+def set_servo_angle(angle):
+    duty = 2 + (angle / 18)  # 각도를 듀티 사이클로 변환
+    servo_pwm.ChangeDutyCycle(duty)
+    time.sleep(0.1)  # 서보모터가 움직일 시간을 줌
+    servo_pwm.ChangeDutyCycle(0)  # 과열 방지
+    print(f"서보모터 각도 설정: {angle}도")
 
+# DC 모터 전진 함수 (속도 증가)
+def motor_forward():
+    global current_speed
+    if current_speed < 100:
+        current_speed += 5
+    GPIO.output(IN1, GPIO.HIGH)
+    GPIO.output(IN2, GPIO.LOW)
+    dc_motor_pwm.ChangeDutyCycle(current_speed)
+    print(f"전진: 속도 {current_speed}%")
+
+# DC 모터 후진 함수 (속도 증가)
+def motor_backward():
+    global current_speed
+    if current_speed < 100:
+        current_speed += 5
+    GPIO.output(IN1, GPIO.LOW)
+    GPIO.output(IN2, GPIO.HIGH)
+    dc_motor_pwm.ChangeDutyCycle(current_speed)
+    print(f"후진: 속도 {current_speed}%")
+
+# DC 모터 속도 감소 함수
+def motor_slow_down():
+    global current_speed
+    if current_speed > 0:
+        current_speed -= 5
+    GPIO.output(IN1, GPIO.HIGH)
+    GPIO.output(IN2, GPIO.LOW)
+    dc_motor_pwm.ChangeDutyCycle(current_speed)
+    print(f"속도 감소: 속도 {current_speed}%")
+
+# 모터 정지 함수
 def motor_stop():
+    global current_speed
+    current_speed = 0
+    GPIO.output(IN1, GPIO.LOW)
+    GPIO.output(IN2, GPIO.LOW)
+    dc_motor_pwm.ChangeDutyCycle(0)
     print("모터 정지")
 
-def motor_left(speed):
-    print(f"모터 왼쪽 회전, 속도: {speed}")
+# 초기 서보모터 각도 설정
+set_servo_angle(current_angle)
 
-def motor_right(speed):
-    print(f"모터 오른쪽 회전, 속도: {speed}")
+# 카메라 스트리밍 및 이미지 저장 함수
+def camera_streaming():
+    save_path = "/home/pi/Image/"
+    capture_interval = 2  # 2초마다 캡처
+    last_capture_time = time.time()
+
+    # OpenCV 카메라 초기화
+    cap = cv2.VideoCapture(0)
+    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+
+    if not cap.isOpened():
+        print("카메라를 열 수 없습니다!")
+        return
+
+    try:
+        while True:
+            ret, frame = cap.read()
+            if not ret:
+                print("카메라 프레임을 읽을 수 없습니다!")
+                break
+
+            # 화면에 이미지 표시
+            cv2.imshow('frame', frame)
+
+            # 주기적으로 이미지 캡처 및 저장
+            current_time = time.time()
+            if current_time - last_capture_time >= capture_interval:
+                now = datetime.datetime.now().strftime('%y%m%d_%H%M%S')
+                angle = current_angle  # 현재 각도를 기준으로 저장
+                if angle == 45:
+                    filename = f"{save_path}left_{now}.jpg"
+                elif angle == 90:
+                    filename = f"{save_path}center_{now}.jpg"
+                elif angle == 135:
+                    filename = f"{save_path}right_{now}.jpg"
+                else:
+                    filename = f"{save_path}unknown_{now}.jpg"
+
+                if cv2.imwrite(filename, frame):
+                    print(f"이미지 저장 성공: {filename}")
+                else:
+                    print(f"이미지 저장 실패: {filename}")
+
+                last_capture_time = current_time
+
+            if cv2.waitKey(1) & 0xFF == ord('q'):
+                break
+
+    finally:
+        cap.release()
+        cv2.destroyAllWindows()
 
 # 메인 함수
 def main():
-    camera = MyCamera(640, 480)
-    filepath = "/home/pi/Image/"  # 저장될 위치
-    os.makedirs(filepath, exist_ok=True)  # 저장 경로 생성
-    i = 0
-    carState = "stop"
-    speedSet = 0.5
+    camera_thread = threading.Thread(target=camera_streaming, daemon=True)
+    camera_thread.start()
+    camera_thread.join()
 
-    while camera.isOpened():
-        keyValue = cv2.waitKey(10)
+    # GPIO 정리
+    servo_pwm.stop()
+    dc_motor_pwm.stop()
+    GPIO.cleanup()
 
-        if keyValue == ord('q'):  # 'q'를 누르면 종료
-            break
-        elif keyValue == 82:  # 위쪽 방향키: 전진
-            print("go")
-            carState = "go"
-            motor_go(speedSet)
-        elif keyValue == 84:  # 아래쪽 방향키: 정지
-            print("stop")
-            carState = "stop"
-            motor_stop()
-        elif keyValue == 81:  # 왼쪽 방향키: 좌회전
-            print("left")
-            carState = "left"
-            motor_left(speedSet)
-        elif keyValue == 83:  # 오른쪽 방향키: 우회전
-            print("right")
-            carState = "right"
-            motor_right(speedSet)
-
-        _, image = camera.read()
-        if image is not None:
-            image = cv2.flip(image, -1)  # 이미지 좌우 반전
-            cv2.imshow('Original', image)
-
-            # 전처리: 높이를 절반으로 잘라 저장
-            height, _, _ = image.shape
-            save_image = image[int(height / 2):, :, :]
-            save_image = cv2.cvtColor(save_image, cv2.COLOR_BGR2YUV)
-            save_image = cv2.GaussianBlur(save_image, (3, 3), 0)
-            save_image = cv2.resize(save_image, (200, 66))
-
-            cv2.imshow('Save', save_image)
-
-            # 상태에 따라 이미지 저장
-            if carState == "left":
-                cv2.imwrite(f"{filepath}{i:05d}_45d.png", save_image)
-                i += 1
-            elif carState == "right":
-                cv2.imwrite(f"{filepath}{i:05d}_135d.png", save_image)
-                i += 1
-            elif carState == "go":
-                cv2.imwrite(f"{filepath}{i:05d}_90d.png", save_image)
-                i += 1
-
-    camera.release()
-    cv2.destroyAllWindows()
-
-# 실행
 if __name__ == "__main__":
     main()
