@@ -102,15 +102,15 @@ def camera_streaming():
                 print("카메라 프레임을 읽을 수 없습니다!")
                 break
 
+            # 화면에 이미지 표시
+            cv2.imshow('frame', frame)
+
             # 전처리: 높이를 절반으로 잘라 저장
             height, _, _ = frame.shape
             save_image = frame[int(height / 2):, :, :]
             save_image = cv2.cvtColor(save_image, cv2.COLOR_BGR2YUV)
             save_image = cv2.GaussianBlur(save_image, (3, 3), 0)
             save_image = cv2.resize(save_image, (200, 66))
-
-            # 화면에 이미지 표시
-            cv2.imshow('frame', frame)
 
             # 주기적으로 이미지 캡처 및 저장
             current_time = time.time()
@@ -142,14 +142,21 @@ def camera_streaming():
 
 # 메인 함수
 def main():
-    camera_thread = threading.Thread(target=camera_streaming, daemon=True)
-    camera_thread.start()
-    camera_thread.join()
+    try:
+        # 카메라 스레드 실행
+        camera_thread = threading.Thread(target=camera_streaming, daemon=True)
+        camera_thread.start()
+        camera_thread.join()
 
-    # GPIO 정리
-    servo_pwm.stop()
-    dc_motor_pwm.stop()
-    GPIO.cleanup()
+    except KeyboardInterrupt:
+        print("사용자 인터럽트 발생! 종료 중...")
+
+    finally:
+        # PWM 정지 및 GPIO 자원 정리
+        servo_pwm.stop()
+        dc_motor_pwm.stop()
+        GPIO.cleanup()
+        print("PWM 및 GPIO 자원 정리 완료.")
 
 if __name__ == "__main__":
     main()
