@@ -34,17 +34,15 @@ ANGLE_INCREMENT = 5  # 서보모터 각도 변화량
 SPEED_INCREMENT = 2  # 속도 증가 단위
 MAX_SPEED = 100  # DC 모터 최대 속도
 
-# 각도 범위를 5개로 나눔
-ANGLE_RANGES = [(0, 36), (37, 72), (73, 108), (109, 144), (145, 180)]
-captured_ranges = set()  # 저장된 각도 범위 추적
-
 # 저장 경로 설정
 base_save_path = "/home/pi/AL_CAR/images"
+folders = {"left": os.path.join(base_save_path, "left"),
+           "center": os.path.join(base_save_path, "center"),
+           "right": os.path.join(base_save_path, "right")}
 
 # 폴더 생성
-for i in range(len(ANGLE_RANGES)):
-    folder_path = os.path.join(base_save_path, f"range_{i}")
-    os.makedirs(folder_path, exist_ok=True)
+for folder in folders.values():
+    os.makedirs(folder, exist_ok=True)
 
 def set_servo_angle(angle):
     duty = 2 + (angle / 18)
@@ -85,11 +83,13 @@ def motor_stop():
 
 set_servo_angle(current_angle)
 
-def get_angle_range(angle):
-    for i, (start, end) in enumerate(ANGLE_RANGES):
-        if start <= angle <= end:
-            return i
-    return -1  # 범위에 없으면 -1 반환
+def get_direction(angle):
+    if angle <= 36:
+        return "left"
+    elif angle <= 72:
+        return "center"
+    else:
+        return "right"
 
 def on_press(key):
     global current_angle
@@ -120,13 +120,13 @@ def on_release(key):
 cmd = 'libcamera-vid --inline --nopreview -t 0 --codec mjpeg --width 640 --height 480 --framerate 15 -o - --camera 0'
 process = subprocess.Popen(shlex.split(cmd), stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
-capture_interval = 1  # 캡처 간격 (3초)
+capture_interval = 1  # 캡처 간격 (1초)
 last_capture_time = time.time()
 
 def capture_images():
     global last_capture_time
     buffer = b""
-    while len(captured_ranges) < len(ANGLE_RANGES):
+    while True:
         current_time = time.time()
         if current_time - last_capture_time >= capture_interval:
             buffer += process.stdout.read(4096)
@@ -140,21 +140,20 @@ def capture_images():
                     # 실시간 영상 표시
                     cv2.imshow("Camera View", bgr_frame)
 
-                    # 캡처 조건: 각도가 특정 범위에 속하고 해당 범위가 캡처되지 않은 경우
-                    angle_range = get_angle_range(current_angle)
-                    if angle_range != -1:
-                        range_folder = os.path.join(base_save_path, f"range_{angle_range}")
-                        now = datetime.datetime.now().strftime('%y%m%d_%H%M%S')
-                        filename = os.path.join(range_folder, f"{now}.jpg")
-                        try:
-                            if cv2.imwrite(filename, bgr_frame):
-                                print(f"이미지 저장 성공: {filename}")
-                                captured_ranges.add(angle_range)  # 저장된 범위 추가
-                                last_capture_time = current_time  # 마지막 캡처 시간 업데이트
-                            else:
-                                print(f"이미지 저장 실패: {filename}")
-                        except Exception as e:
-                            print(f"이미지 저장 중 에러 발생: {e}")
+                    # 캡처 조건: 현재 각도에 따라 저장 경로 결정
+                    direction = get_direction(current_angle)
+                    folder_path = folders[direction]
+                    now = datetime.datetime.now().strftime('%y%m%d_%H%M%S')
+                    filename = os.path.join(folder_path, f"{now}.jpg")
+                    try:
+                        if cv2.imwrite(filename, bgr_frame):
+                            print(f"이미지 저장 성공: {filename}")
+                            last_capture_time = current_time
+                        else:
+                            print(f"이미지 저장 실패: {filename}")
+                    except Exception as e:
+                        print(f"이미지 저장 중 에러 발생: {e}")
+
                     if cv2.waitKey(1) & 0xFF == ord('q'):
                         break
 
