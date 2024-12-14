@@ -1,8 +1,9 @@
 import os
 import cv2
 import numpy as np
-from tflite_runtime.interpreter import Interpreter
-from tflite_runtime.interpreter import load_delegate
+from tensorflow.keras.models import Sequential, load_model
+from tensorflow.keras.layers import Conv2D, Flatten, Dense
+from tensorflow.keras.optimizers import Adam
 import RPi.GPIO as GPIO
 import time
 
@@ -20,22 +21,57 @@ dc_motor_pwm = GPIO.PWM(DC_MOTOR_PIN, 100)  # DC 모터: 100Hz PWM
 servo_pwm.start(0)
 dc_motor_pwm.start(0)
 
-# === Edge TPU 모델 로드 ===
-def load_tpu_model(model_path):
-    interpreter = Interpreter(
-        model_path=model_path,
-        experimental_delegates=[load_delegate('libedgetpu.so.1')]
-    )
-    interpreter.allocate_tensors()
-    print("Edge TPU 모델 로드 완료")
-    return interpreter
+# === 데이터 로드 ===
+def load_data(data_dir):
+    image_paths = []
+    labels = []
+
+    for file_name in os.listdir(data_dir):
+        if file_name.lower().startswith('left'):
+            image_paths.append(os.path.join(data_dir, file_name))
+            labels.append(0)  # Left: 0
+        elif file_name.lower().startswith('right'):
+            image_paths.append(os.path.join(data_dir, file_name))
+            labels.append(1)  # Right: 1
+
+    images = []
+    for image_path in image_paths:
+        image = cv2.imread(image_path, cv2.IMREAD_GRAYSCALE)
+        if image is not None:
+            resized = cv2.resize(image, (64, 64))
+            images.append(resized / 255.0)  # Normalize
+
+    return np.array(images).reshape(-1, 64, 64, 1), np.array(labels)
+
+# === 모델 생성 및 학습 ===
+def create_model():
+    model = Sequential([
+        Conv2D(32, (3, 3), activation='relu', input_shape=(64, 64, 1)),
+        Conv2D(64, (3, 3), activation='relu'),
+        Flatten(),
+        Dense(64, activation='relu'),
+        Dense(2, activation='softmax')
+    ])
+    model.compile(optimizer=Adam(learning_rate=0.001), loss='sparse_categorical_crossentropy', metrics=['accuracy'])
+    return model
+
+def train_model(model, X_train, y_train, epochs=10):
+    model.fit(X_train, y_train, validation_split=0.2, epochs=epochs, batch_size=32)
+    model.save('/home/pi/autonomous_car_model.h5')
+    print("모델 학습 및 저장 완료")
+
+# === 데이터 학습 ===
+data_dir = '/home/pi/images'  # 데이터 경로 설정
+X_train, y_train = load_data(data_dir)
+model = create_model()
+train_model(model, X_train, y_train, epochs=10)
 
 # === 데이터 전처리 ===
 def preprocess_image(frame):
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
     resized = cv2.resize(gray, (64, 64))
     normalized = resized / 255.0
-    return normalized.reshape(1, 64, 64, 1).astype(np.float32)
+    return normalized.reshape(1, 64, 64, 1)
 
 # === RC카 제어 ===
 def set_servo_angle(angle):
@@ -54,10 +90,7 @@ def motor_stop():
     print("모터 정지")
 
 # === 실시간 주행 ===
-def drive_model(interpreter):
-    input_details = interpreter.get_input_details()
-    output_details = interpreter.get_output_details()
-
+def drive_model(model):
     cap = cv2.VideoCapture(0)  # 카메라 0번 사용
     if not cap.isOpened():
         print("카메라를 열 수 없습니다.")
@@ -74,9 +107,7 @@ def drive_model(interpreter):
             processed_frame = preprocess_image(frame)
 
             # 모델 예측
-            interpreter.set_tensor(input_details[0]['index'], processed_frame)
-            interpreter.invoke()
-            prediction = interpreter.get_tensor(output_details[0]['index'])
+            prediction = model.predict(processed_frame)
             direction = np.argmax(prediction)  # 0: Left, 1: Right
 
             # RC카 제어
@@ -110,6 +141,6 @@ def drive_model(interpreter):
 
 # === 메인 실행 ===
 if __name__ == "__main__":
-    model_path = '/home/pi/autonomous_car_model.tflite'  # Edge TPU 모델 경로
-    interpreter = load_tpu_model(model_path)
-    drive_model(interpreter)
+    model = load_model('/home/pi/autonomous_car_model.h5')
+    print("모델 로드 완료")
+    drive_model(model)

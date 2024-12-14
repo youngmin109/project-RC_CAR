@@ -1,180 +1,100 @@
-import RPi.GPIO as GPIO
-import time
-from pynput import keyboard
+import os
 import cv2
 import numpy as np
-import subprocess
-import shlex
-import datetime
-import os
-import threading
+from tensorflow.keras.models import load_model
+import RPi.GPIO as GPIO
+import time
 
 # === GPIO 설정 ===
 SERVO_PIN = 12  # 서보모터 핀 번호
-IN1 = 17        # DC 모터 IN1 핀 번호
-IN2 = 27        # DC 모터 IN2 핀 번호
-ENA = 18        # DC 모터 ENA 핀 번호
+DC_MOTOR_PIN = 18  # DC 모터 핀 번호
 
-GPIO.setmode(GPIO.BCM)  # BCM 핀 번호 사용
+GPIO.setmode(GPIO.BCM)
 GPIO.setup(SERVO_PIN, GPIO.OUT)
-GPIO.setup(IN1, GPIO.OUT)
-GPIO.setup(IN2, GPIO.OUT)
-GPIO.setup(ENA, GPIO.OUT)
+GPIO.setup(DC_MOTOR_PIN, GPIO.OUT)
 
 servo_pwm = GPIO.PWM(SERVO_PIN, 50)  # 서보모터: 50Hz PWM
-dc_motor_pwm = GPIO.PWM(ENA, 100)   # DC 모터: 100Hz PWM
+dc_motor_pwm = GPIO.PWM(DC_MOTOR_PIN, 100)  # DC 모터: 100Hz PWM
 
 servo_pwm.start(0)
 dc_motor_pwm.start(0)
 
-current_angle = 30  # 서보모터 초기 각도
-current_speed = 0   # DC 모터 초기 속도
+# === 데이터 전처리 ===
+def preprocess_image(frame):
+    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+    resized = cv2.resize(gray, (64, 64))
+    normalized = resized / 255.0
+    return normalized.reshape(1, 64, 64, 1)
 
-ANGLE_INCREMENT = 5  # 서보모터 각도 변화량
-SPEED_INCREMENT = 2  # 속도 증가 단위
-MAX_SPEED = 100  # DC 모터 최대 속도
-
-# 저장 경로 설정
-base_save_path = "/home/pi/AL_CAR/images"
-folders = {"left": os.path.join(base_save_path, "left"),
-           "center": os.path.join(base_save_path, "center"),
-           "right": os.path.join(base_save_path, "right")}
-
-# 폴더 생성
-for folder in folders.values():
-    os.makedirs(folder, exist_ok=True)
-
+# === RC카 제어 ===
 def set_servo_angle(angle):
     duty = 2 + (angle / 18)
     servo_pwm.ChangeDutyCycle(duty)
     time.sleep(0.1)
     servo_pwm.ChangeDutyCycle(0)
+    print(f"서보모터 각도 설정: {angle}도")
 
-def motor_forward():
-    global current_speed
-    if current_speed < MAX_SPEED:
-        current_speed += SPEED_INCREMENT
-    current_speed = min(current_speed, MAX_SPEED)
-    GPIO.output(IN1, GPIO.HIGH)
-    GPIO.output(IN2, GPIO.LOW)
-    dc_motor_pwm.ChangeDutyCycle(current_speed)
-    print(f"전진: 속도 {current_speed}%")
-
-def motor_slow_down():
-    global current_speed
-    if current_speed > 0:
-        current_speed -= SPEED_INCREMENT
-    current_speed = max(current_speed, 0)
-    if current_speed == 0:
-        motor_stop()
-    else:
-        GPIO.output(IN1, GPIO.HIGH)
-        GPIO.output(IN2, GPIO.LOW)
-        dc_motor_pwm.ChangeDutyCycle(current_speed)
-        print(f"속도 감소: 속도 {current_speed}%")
+def motor_forward(speed):
+    dc_motor_pwm.ChangeDutyCycle(speed)
+    print(f"전진: 속도 {speed}%")
 
 def motor_stop():
-    global current_speed
-    current_speed = 0
-    GPIO.output(IN1, GPIO.LOW)
-    GPIO.output(IN2, GPIO.LOW)
     dc_motor_pwm.ChangeDutyCycle(0)
     print("모터 정지")
 
-set_servo_angle(current_angle)
+# === 실시간 주행 ===
+def drive_model(model):
+    cap = cv2.VideoCapture(0)  # 카메라 0번 사용
+    if not cap.isOpened():
+        print("카메라를 열 수 없습니다.")
+        return
 
-def get_direction(angle):
-    if angle <= 36:
-        return "left"
-    elif angle <= 72:
-        return "center"
-    else:
-        return "right"
-
-def on_press(key):
-    global current_angle
     try:
-        if key == keyboard.Key.up:
-            if current_angle != 30:
-                current_angle = 30
-                set_servo_angle(current_angle)
-                print(f"서보모터 초기화: 각도 {current_angle}도")
+        while True:
+            ret, frame = cap.read()
+            if not ret:
+                print("프레임을 읽을 수 없습니다.")
+                break
+
+            # 이미지 전처리
+            processed_frame = preprocess_image(frame)
+
+            # 모델 예측
+            prediction = model.predict(processed_frame)
+            direction = np.argmax(prediction)  # 0: Left, 1: Right
+
+            # RC카 제어
+            if direction == 0:
+                set_servo_angle(15)  # 왼쪽
+                print("왼쪽으로 조향")
+            elif direction == 1:
+                set_servo_angle(45)  # 오른쪽
+                print("오른쪽으로 조향")
             else:
-                print("중앙에서 캡처")
-                motor_forward()
-        elif key == keyboard.Key.down:
-            motor_slow_down()
-        elif key == keyboard.Key.left:
-            current_angle = max(0, current_angle - ANGLE_INCREMENT)
-            set_servo_angle(current_angle)
-            print(f"서보모터 왼쪽 회전: 각도 {current_angle}도")
-        elif key == keyboard.Key.right:
-            current_angle = min(180, current_angle + ANGLE_INCREMENT)
-            set_servo_angle(current_angle)
-            print(f"서보모터 오른쪽 회전: 각도 {current_angle}도")
-        elif key == keyboard.Key.space:
-            motor_stop()
-    except AttributeError:
-        pass
+                set_servo_angle(30)  # 정면
+                print("정면")
 
-def on_release(key):
-    if key == keyboard.Key.esc:
-        print("프로그램 종료")
-        return False
+            # 전진
+            motor_forward(50)
 
-# === 카메라 설정 ===
-cmd = 'libcamera-vid --inline --nopreview -t 0 --codec mjpeg --width 640 --height 480 --framerate 15 -o - --camera 0'
-process = subprocess.Popen(shlex.split(cmd), stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            # ESC 키를 누르면 종료
+            if cv2.waitKey(1) & 0xFF == 27:
+                break
 
-capture_interval = 1  # 캡처 간격 (1초)
-last_capture_time = time.time()
+    except KeyboardInterrupt:
+        print("프로그램 종료 중...")
 
-def capture_images():
-    global last_capture_time
-    buffer = b""
-    while True:
-        current_time = time.time()
-        if current_time - last_capture_time >= capture_interval:
-            buffer += process.stdout.read(4096)
-            a = buffer.find(b'\xff\xd8')
-            b = buffer.find(b'\xff\xd9')
-            if a != -1 and b != -1:
-                jpg = buffer[a:b+2]
-                buffer = buffer[b+2:]
-                bgr_frame = cv2.imdecode(np.frombuffer(jpg, dtype=np.uint8), cv2.IMREAD_COLOR)
-                if bgr_frame is not None:
-                    # 실시간 영상 표시
-                    cv2.imshow("Camera View", bgr_frame)
+    finally:
+        cap.release()
+        cv2.destroyAllWindows()
+        servo_pwm.stop()
+        dc_motor_pwm.stop()
+        GPIO.cleanup()
+        print("자원을 정리하고 프로그램을 종료합니다.")
 
-                    # 캡처 조건: 현재 각도에 따라 저장 경로 결정
-                    direction = get_direction(current_angle)
-                    folder_path = folders[direction]
-                    now = datetime.datetime.now().strftime('%y%m%d_%H%M%S')
-                    filename = os.path.join(folder_path, f"{now}.jpg")
-                    try:
-                        if cv2.imwrite(filename, bgr_frame):
-                            print(f"이미지 저장 성공: {filename}")
-                            last_capture_time = current_time
-                        else:
-                            print(f"이미지 저장 실패: {filename}")
-                    except Exception as e:
-                        print(f"이미지 저장 중 에러 발생: {e}")
-
-                    if cv2.waitKey(1) & 0xFF == ord('q'):
-                        break
-
-# === 프로그램 실행 ===
-try:
-    threading.Thread(target=capture_images, daemon=True).start()
-    listener = keyboard.Listener(on_press=on_press, on_release=on_release)
-    listener.start()
-    listener.join()
-except KeyboardInterrupt:
-    pass
-finally:
-    process.terminate()
-    cv2.destroyAllWindows()
-    servo_pwm.stop()
-    dc_motor_pwm.stop()
-    GPIO.cleanup()
-    print("프로그램 종료")
+# === 메인 실행 ===
+if __name__ == "__main__":
+    model_path = '/home/pi/autonomous_car_model.h5'  # H5 모델 경로
+    model = load_model(model_path)
+    print("모델 로드 완료")
+    drive_model(model)
