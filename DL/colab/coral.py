@@ -1,12 +1,11 @@
 import tensorflow as tf
 
-# 기존 Keras 모델 로드
-model = tf.keras.models.load_model('autonomous_car_model.h5')
+# .h5 파일 경로
+h5_model_path = "C:/Users/USER/Downloads/autonomous_car_model.h5"
+saved_model_dir = "C:/Users/USER/Downloads/autonomous_car_model"
 
-# TFLite 모델로 변환
-converter = tf.lite.TFLiteConverter.from_keras_model(model)
-tflite_model = converter.convert()
+# 모델 로드 및 변환
+model = tf.keras.models.load_model(h5_model_path)
+model.save(saved_model_dir)
+print(f"모델이 SavedModel 형식으로 변환되어 저장되었습니다: {saved_model_dir}")
 
-# 모델 저장
-with open('autonomous_car_model.tflite', 'wb') as f:
-    f.write(tflite_model)
