@@ -110,6 +110,6 @@ def drive_model(interpreter):
 
 # === 메인 실행 ===
 if __name__ == "__main__":
-    model_path = '/home/pi/your_model_edgetpu.tflite'  # Edge TPU 모델 경로
+    model_path = '/home/pi/autonomous_car_model.tflite'  # Edge TPU 모델 경로
     interpreter = load_tpu_model(model_path)
     drive_model(interpreter)
