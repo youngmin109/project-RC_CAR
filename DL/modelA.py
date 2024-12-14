@@ -2,7 +2,7 @@ import RPi.GPIO as GPIO
 import time
 import cv2
 import numpy as np
-import tensorflow as tf
+from tensorflow.keras.models import load_model
 
 # === GPIO 설정 ===
 SERVO_PIN = 12  # 서보모터 핀 번호
@@ -27,12 +27,8 @@ current_angle = 30
 current_speed = 0
 
 # === 모델 로드 ===
-try:
-    model = tf.keras.models.load_model('/home/pi/autonomous_car_model.h5', compile=False)
-    print("모델 로드 완료")
-except Exception as e:
-    print(f"모델 로드 실패: {e}")
-    exit()
+model = load_model('/home/pi/autonomous_car_model.h5')
+print("모델 로드 완료")
 
 # === 함수 정의 ===
 def set_servo_angle(angle):
@@ -85,7 +81,7 @@ def main():
             processed_frame = preprocess_image(frame)
 
             # 모델 예측
-            prediction = model.predict(processed_frame, verbose=0)
+            prediction = model.predict(processed_frame)
             direction = np.argmax(prediction)  # 0: Left, 1: Right
 
             # RC카 제어
