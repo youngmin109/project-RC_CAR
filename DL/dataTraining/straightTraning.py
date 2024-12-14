@@ -95,7 +95,12 @@ def on_press(key):
     global current_angle
     try:
         if key == keyboard.Key.up:
-            motor_forward()
+            if current_angle != 30:
+                current_angle = 30
+                set_servo_angle(current_angle)
+                print(f"서보모터 초기화: 각도 {current_angle}도")
+            else:
+                motor_forward()
         elif key == keyboard.Key.down:
             motor_slow_down()
         elif key == keyboard.Key.left:
