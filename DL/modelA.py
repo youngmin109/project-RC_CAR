@@ -6,26 +6,21 @@ from tensorflow.keras.models import load_model
 
 # === GPIO 설정 ===
 SERVO_PIN = 12  # 서보모터 핀 번호
-IN1 = 17        # DC 모터 IN1 핀 번호
-IN2 = 27        # DC 모터 IN2 핀 번호
-ENA = 18        # DC 모터 ENA 핀 번호
+DC_MOTOR_PIN = 18  # DC 모터 핀 번호
 
-GPIO.setmode(GPIO.BCM)  # BCM 핀 번호 사용
+GPIO.setmode(GPIO.BCM)
 GPIO.setup(SERVO_PIN, GPIO.OUT)
-GPIO.setup(IN1, GPIO.OUT)
-GPIO.setup(IN2, GPIO.OUT)
-GPIO.setup(ENA, GPIO.OUT)
+GPIO.setup(DC_MOTOR_PIN, GPIO.OUT)
 
 servo_pwm = GPIO.PWM(SERVO_PIN, 50)  # 서보모터: 50Hz PWM
-dc_motor_pwm = GPIO.PWM(ENA, 100)   # DC 모터: 100Hz PWM
+dc_motor_pwm = GPIO.PWM(DC_MOTOR_PIN, 100)  # DC 모터: 100Hz PWM
 
 servo_pwm.start(0)
 dc_motor_pwm.start(0)
 
 # 초기값 설정
-current_angle = 30
 current_speed = 0
-speed_increment = 5  # 속도 증가 단위
+current_angle = 30
 
 # === 모델 로드 ===
 model = load_model('/home/pi/autonomous_car_model.h5')
@@ -39,24 +34,15 @@ def set_servo_angle(angle):
     servo_pwm.ChangeDutyCycle(0)
     print(f"서보모터 각도 설정: {angle}도")
 
-def motor_forward():
-    global current_speed
-    if current_speed < 100:
-        current_speed += speed_increment
-    GPIO.output(IN1, GPIO.HIGH)
-    GPIO.output(IN2, GPIO.LOW)
-    dc_motor_pwm.ChangeDutyCycle(current_speed)
-    print(f"전진: 속도 {current_speed}%")
+def motor_forward(speed):
+    dc_motor_pwm.ChangeDutyCycle(speed)
+    print(f"전진: 속도 {speed}%")
 
 def motor_stop():
-    global current_speed
-    current_speed = 0
-    GPIO.output(IN1, GPIO.LOW)
-    GPIO.output(IN2, GPIO.LOW)
     dc_motor_pwm.ChangeDutyCycle(0)
     print("모터 정지")
 
-# === 카메라 스트리밍 설정 ===
+# === 카메라 이미지 전처리 ===
 def preprocess_image(frame):
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
     resized = cv2.resize(gray, (64, 64))
@@ -65,7 +51,7 @@ def preprocess_image(frame):
 
 def main():
     # 카메라 초기화
-    cap = cv2.VideoCapture(0)  # 0번 카메라 사용
+    cap = cv2.VideoCapture(0)  # 카메라 0번 사용
 
     if not cap.isOpened():
         print("카메라를 열 수 없습니다.")
@@ -94,24 +80,22 @@ def main():
                 current_angle = 45
                 set_servo_angle(current_angle)
                 print("오른쪽으로 조향")
+            else:
+                current_angle = 30
+                set_servo_angle(current_angle)
+                print("정면")
 
             # 전진
-            motor_forward()
+            motor_forward(50)
 
             # ESC 키를 누르면 종료
             if cv2.waitKey(1) & 0xFF == 27:
                 break
 
     except KeyboardInterrupt:
-        print("프로그램 종료")
+        print("프로그램 종료 중...")
 
     finally:
+        # 자원 정리
         cap.release()
-        cv2.destroyAllWindows()
-        servo_pwm.stop()
-        dc_motor_pwm.stop()
-        GPIO.cleanup()
-        print("자원을 정리하고 프로그램을 종료합니다.")
-
-if __name__ == "__main__":
-    main()
+   
