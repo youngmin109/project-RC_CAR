@@ -1,10 +1,7 @@
 import os
 import cv2
 import numpy as np
-import tensorflow as tf
-from tensorflow.keras.models import Sequential, load_model
-from tensorflow.keras.layers import Conv2D, Flatten, Dense
-from tensorflow.keras.optimizers import Adam
+from tflite_runtime.interpreter import Interpreter, load_delegate
 import RPi.GPIO as GPIO
 import time
 
@@ -22,46 +19,15 @@ dc_motor_pwm = GPIO.PWM(DC_MOTOR_PIN, 100)  # DC 모터: 100Hz PWM
 servo_pwm.start(0)
 dc_motor_pwm.start(0)
 
-# === 데이터 로드 ===
-def load_data(data_dir):
+# === Edge TPU 모델 로드 ===
+def load_tpu_model(model_path):
     """
-    데이터 로드 함수
-    - 사전 전처리된 데이터를 불러옵니다.
+    Edge TPU 모델 로드 함수
     """
-    image_paths = []
-    labels = []
-
-    for file_name in os.listdir(data_dir):
-        if file_name.lower().startswith('left'):
-            image_paths.append(os.path.join(data_dir, file_name))
-            labels.append(0)  # Left: 0
-        elif file_name.lower().startswith('right'):
-            image_paths.append(os.path.join(data_dir, file_name))
-            labels.append(1)  # Right: 1
-
-    images = []
-    for image_path in image_paths:
-        image = cv2.imread(image_path, cv2.IMREAD_GRAYSCALE)
-        if image is not None:
-            images.append(image / 255.0)  # Normalize
-    return np.array(images).reshape(-1, 64, 64, 1), np.array(labels)
-
-# === 모델 생성 및 훈련 ===
-def create_model():
-    model = Sequential([
-        Conv2D(32, (3, 3), activation='relu', input_shape=(64, 64, 1)),
-        Conv2D(64, (3, 3), activation='relu'),
-        Flatten(),
-        Dense(64, activation='relu'),
-        Dense(2, activation='softmax')
-    ])
-    model.compile(optimizer=Adam(learning_rate=0.001), loss='sparse_categorical_crossentropy', metrics=['accuracy'])
-    return model
-
-def train_model(model, X_train, y_train, epochs=10):
-    model.fit(X_train, y_train, validation_split=0.2, epochs=epochs, batch_size=32)
-    model.save('/home/pi/autonomous_car_model.h5')
-    print("모델 훈련 및 저장 완료")
+    return Interpreter(
+        model_path=model_path,
+        experimental_delegates=[load_delegate('libedgetpu.so.1')]
+    )
 
 # === RC카 제어 ===
 def set_servo_angle(angle):
@@ -79,13 +45,24 @@ def motor_stop():
     dc_motor_pwm.ChangeDutyCycle(0)
     print("모터 정지")
 
+# === 이미지 전처리 ===
+def preprocess_image(frame):
+    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+    resized = cv2.resize(gray, (64, 64))
+    normalized = resized / 255.0
+    return normalized.reshape(1, 64, 64, 1)
+
 # === 실시간 주행 ===
-def drive_model(model):
+def drive_model(interpreter):
     cap = cv2.VideoCapture(0)  # 카메라 0번 사용
 
     if not cap.isOpened():
         print("카메라를 열 수 없습니다.")
         return
+
+    # 입력과 출력 텐서 정보 가져오기
+    input_details = interpreter.get_input_details()
+    output_details = interpreter.get_output_details()
 
     try:
         while True:
@@ -95,14 +72,13 @@ def drive_model(model):
                 break
 
             # 이미지 전처리
-            gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-            resized = cv2.resize(gray, (64, 64))
-            normalized = resized / 255.0
-            processed_frame = normalized.reshape(1, 64, 64, 1)
+            processed_frame = preprocess_image(frame)
 
             # 모델 예측
-            prediction = model.predict(processed_frame)
-            direction = np.argmax(prediction)  # 0: Left, 1: Right
+            interpreter.set_tensor(input_details[0]['index'], processed_frame)
+            interpreter.invoke()
+            output_data = interpreter.get_tensor(output_details[0]['index'])
+            direction = np.argmax(output_data)  # 0: Left, 1: Right
 
             # RC카 제어
             if direction == 0:
@@ -135,13 +111,9 @@ def drive_model(model):
 
 # === 메인 실행 ===
 if __name__ == "__main__":
-    data_dir = 'C:\Users\USER\OneDrive\바탕 화면\images'  # 데이터 경로 설정
-    X_train, y_train = load_data(data_dir)
+    model_path = '/home/pi/autonomous_car_model.tflite'  # TFLite 모델 경로
+    interpreter = load_tpu_model(model_path)
+    interpreter.allocate_tensors()  # Edge TPU 인터프리터 준비
+    print("Edge TPU 모델 로드 완료")
 
-    # 모델 생성 및 훈련
-    model = create_model()
-    train_model(model, X_train, y_train, epochs=10)
-
-    # 실시간 주행
-    model = load_model('/home/pi/autonomous_car_model.h5')
-    drive_model(model)
+    drive_model(interpreter)
