@@ -1,8 +1,12 @@
-import RPi.GPIO as GPIO
-import time
+import os
 import cv2
 import numpy as np
-from tensorflow.keras.models import load_model
+import tensorflow as tf
+from tensorflow.keras.models import Sequential, load_model
+from tensorflow.keras.layers import Conv2D, Flatten, Dense
+from tensorflow.keras.optimizers import Adam
+import RPi.GPIO as GPIO
+import time
 
 # === GPIO 설정 ===
 SERVO_PIN = 12  # 서보모터 핀 번호
@@ -18,9 +22,48 @@ dc_motor_pwm = GPIO.PWM(DC_MOTOR_PIN, 100)  # DC 모터: 100Hz PWM
 servo_pwm.start(0)
 dc_motor_pwm.start(0)
 
-# 초기값 설정
-current_angle = 30
+# === 데이터 로드 ===
+def load_data(data_dir):
+    """
+    데이터 로드 함수
+    - 사전 전처리된 데이터를 불러옵니다.
+    """
+    image_paths = []
+    labels = []
 
+    for file_name in os.listdir(data_dir):
+        if file_name.lower().startswith('left'):
+            image_paths.append(os.path.join(data_dir, file_name))
+            labels.append(0)  # Left: 0
+        elif file_name.lower().startswith('right'):
+            image_paths.append(os.path.join(data_dir, file_name))
+            labels.append(1)  # Right: 1
+
+    images = []
+    for image_path in image_paths:
+        image = cv2.imread(image_path, cv2.IMREAD_GRAYSCALE)
+        if image is not None:
+            images.append(image / 255.0)  # Normalize
+    return np.array(images).reshape(-1, 64, 64, 1), np.array(labels)
+
+# === 모델 생성 및 훈련 ===
+def create_model():
+    model = Sequential([
+        Conv2D(32, (3, 3), activation='relu', input_shape=(64, 64, 1)),
+        Conv2D(64, (3, 3), activation='relu'),
+        Flatten(),
+        Dense(64, activation='relu'),
+        Dense(2, activation='softmax')
+    ])
+    model.compile(optimizer=Adam(learning_rate=0.001), loss='sparse_categorical_crossentropy', metrics=['accuracy'])
+    return model
+
+def train_model(model, X_train, y_train, epochs=10):
+    model.fit(X_train, y_train, validation_split=0.2, epochs=epochs, batch_size=32)
+    model.save('/home/pi/autonomous_car_model.h5')
+    print("모델 훈련 및 저장 완료")
+
+# === RC카 제어 ===
 def set_servo_angle(angle):
     duty = 2 + (angle / 18)
     servo_pwm.ChangeDutyCycle(duty)
@@ -36,15 +79,9 @@ def motor_stop():
     dc_motor_pwm.ChangeDutyCycle(0)
     print("모터 정지")
 
-def preprocess_image(frame):
-    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-    resized = cv2.resize(gray, (64, 64))
-    normalized = resized / 255.0
-    return normalized.reshape(1, 64, 64, 1)
-
-def main():
-    # 카메라 초기화
-    cap = cv2.VideoCapture(0, cv2.CAP_V4L)
+# === 실시간 주행 ===
+def drive_model(model):
+    cap = cv2.VideoCapture(0)  # 카메라 0번 사용
 
     if not cap.isOpened():
         print("카메라를 열 수 없습니다.")
@@ -58,24 +95,24 @@ def main():
                 break
 
             # 이미지 전처리
-            processed_frame = preprocess_image(frame)
+            gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+            resized = cv2.resize(gray, (64, 64))
+            normalized = resized / 255.0
+            processed_frame = normalized.reshape(1, 64, 64, 1)
 
             # 모델 예측
             prediction = model.predict(processed_frame)
             direction = np.argmax(prediction)  # 0: Left, 1: Right
 
             # RC카 제어
-            if direction == 0:  # Left
-                current_angle = 15
-                set_servo_angle(current_angle)
+            if direction == 0:
+                set_servo_angle(15)  # 왼쪽
                 print("왼쪽으로 조향")
-            elif direction == 1:  # Right
-                current_angle = 45
-                set_servo_angle(current_angle)
+            elif direction == 1:
+                set_servo_angle(45)  # 오른쪽
                 print("오른쪽으로 조향")
             else:
-                current_angle = 30
-                set_servo_angle(current_angle)
+                set_servo_angle(30)  # 정면
                 print("정면")
 
             # 전진
@@ -96,10 +133,15 @@ def main():
         GPIO.cleanup()
         print("자원을 정리하고 프로그램을 종료합니다.")
 
-# === 모델 로드 ===
-try:
+# === 메인 실행 ===
+if __name__ == "__main__":
+    data_dir = 'C:\Users\USER\OneDrive\바탕 화면\images'  # 데이터 경로 설정
+    X_train, y_train = load_data(data_dir)
+
+    # 모델 생성 및 훈련
+    model = create_model()
+    train_model(model, X_train, y_train, epochs=10)
+
+    # 실시간 주행
     model = load_model('/home/pi/autonomous_car_model.h5')
-    print("모델 로드 완료")
-    main()
-except Exception as e:
-    print(f"오류 발생: {e}")
+    drive_model(model)
