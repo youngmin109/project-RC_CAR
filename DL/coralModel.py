@@ -9,14 +9,18 @@ import shlex
 
 # === GPIO 설정 ===
 SERVO_PIN = 12  # 서보모터 핀 번호
-DC_MOTOR_PIN = 18  # DC 모터 핀 번호
+IN1 = 17        # DC 모터 IN1 핀 번호
+IN2 = 27        # DC 모터 IN2 핀 번호
+ENA = 18        # DC 모터 ENA 핀 번호
 
 GPIO.setmode(GPIO.BCM)
 GPIO.setup(SERVO_PIN, GPIO.OUT)
-GPIO.setup(DC_MOTOR_PIN, GPIO.OUT)
+GPIO.setup(IN1, GPIO.OUT)
+GPIO.setup(IN2, GPIO.OUT)
+GPIO.setup(ENA, GPIO.OUT)
 
 servo_pwm = GPIO.PWM(SERVO_PIN, 50)  # 서보모터: 50Hz PWM
-dc_motor_pwm = GPIO.PWM(DC_MOTOR_PIN, 100)  # DC 모터: 100Hz PWM
+dc_motor_pwm = GPIO.PWM(ENA, 100)    # DC 모터: 100Hz PWM
 
 servo_pwm.start(0)
 dc_motor_pwm.start(20)  # DC 모터 직진 속도 설정
@@ -37,10 +41,14 @@ def set_servo_angle(angle):
     print(f"서보모터 각도 설정: {angle}도")
 
 def motor_forward(speed):
+    GPIO.output(IN1, GPIO.HIGH)
+    GPIO.output(IN2, GPIO.LOW)
     dc_motor_pwm.ChangeDutyCycle(speed)
     print(f"전진: 속도 {speed}%")
 
 def motor_stop():
+    GPIO.output(IN1, GPIO.LOW)
+    GPIO.output(IN2, GPIO.LOW)
     dc_motor_pwm.ChangeDutyCycle(0)
     print("모터 정지")
 
