@@ -25,6 +25,7 @@ dc_motor_pwm.start(0)
 # 초기값 설정
 current_angle = 30
 current_speed = 0
+speed_increment = 5  # 속도 증가 단위
 
 # === 모델 로드 ===
 model = load_model('/home/pi/autonomous_car_model.h5')
@@ -41,7 +42,7 @@ def set_servo_angle(angle):
 def motor_forward():
     global current_speed
     if current_speed < 100:
-        current_speed += 5
+        current_speed += speed_increment
     GPIO.output(IN1, GPIO.HIGH)
     GPIO.output(IN2, GPIO.LOW)
     dc_motor_pwm.ChangeDutyCycle(current_speed)
