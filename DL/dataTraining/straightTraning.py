@@ -100,6 +100,7 @@ def on_press(key):
                 set_servo_angle(current_angle)
                 print(f"서보모터 초기화: 각도 {current_angle}도")
             else:
+                print("중앙에서 캡처")
                 motor_forward()
         elif key == keyboard.Key.down:
             motor_slow_down()
