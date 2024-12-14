@@ -3,7 +3,7 @@ import time
 import cv2
 import numpy as np
 from tensorflow.keras.models import load_model
-
+## 수정중중
 # === GPIO 설정 ===
 SERVO_PIN = 12  # 서보모터 핀 번호
 IN1 = 17        # DC 모터 IN1 핀 번호
