@@ -107,6 +107,7 @@ def drive_model(model):
 
 # === 메인 실행 ===
 if __name__ == "__main__":
+    # 효찬 SD카드으로로 교체 
     model_path = '/home/HyoChan/RC_CAR/autonomous_car_model.h5'  # H5 모델 경로
     model = load_model(model_path)
     print("모델 로드 완료")

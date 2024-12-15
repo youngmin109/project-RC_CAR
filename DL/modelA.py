@@ -53,7 +53,9 @@ print("모델 생성 완료")
 # 모델 학습 함수
 def train_model(model, X_train, y_train, epochs=10):
     model.fit(X_train, y_train, validation_split=0.2, epochs=epochs, batch_size=32)
-    model.save('/home/HyoChan/RC_CAR/autonomous_car_model.h5')  # 모델 저장
+    model.save('/home/HyoChan/RC_CAR/autonomous_car_model.h5')  
+    # 효찬 SD카드으로로 교체 
+    # 모델 저장
     print("모델 학습 및 저장 완료")
 
 # 모델 학습
