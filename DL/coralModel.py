@@ -23,7 +23,7 @@ servo_pwm = GPIO.PWM(SERVO_PIN, 50)  # 서보모터: 50Hz PWM
 dc_motor_pwm = GPIO.PWM(ENA, 100)    # DC 모터: 100Hz PWM
 
 servo_pwm.start(0)
-dc_motor_pwm.start(20)  # DC 모터 직진 속도 설정
+dc_motor_pwm.start(30)  # DC 모터 직진 속도 설정
 
 # === 데이터 전처리 ===
 def preprocess_image(frame):
@@ -84,13 +84,13 @@ def drive_model(model):
 
                 # RC카 제어
                 if direction == 0:
-                    set_servo_angle(20)  # 왼쪽
+                    set_servo_angle(45)  # 왼쪽
                     print("왼쪽으로 조향")
                 elif direction == 1:
-                    set_servo_angle(40)  # 오른쪽
+                    set_servo_angle(135)  # 오른쪽
                     print("오른쪽으로 조향")
                 else:
-                    set_servo_angle(30)  # 정면
+                    set_servo_angle(90)  # 정면
                     print("정면")
 
                 
