@@ -78,19 +78,22 @@ def drive_model(model):
                 prediction = model.predict(processed_frame)
                 direction = np.argmax(prediction)  # 0: Left, 1: Right
 
+
+                # 전진
+                motor_forward(30)
+
                 # RC카 제어
                 if direction == 0:
-                    set_servo_angle(15)  # 왼쪽
+                    set_servo_angle(20)  # 왼쪽
                     print("왼쪽으로 조향")
                 elif direction == 1:
-                    set_servo_angle(45)  # 오른쪽
+                    set_servo_angle(40)  # 오른쪽
                     print("오른쪽으로 조향")
                 else:
                     set_servo_angle(30)  # 정면
                     print("정면")
 
-                # 전진
-                motor_forward(20)
+                
 
     except KeyboardInterrupt:
         print("프로그램 종료 중...")
