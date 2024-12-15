@@ -8,34 +8,32 @@ import numpy as np
 import cv2
 
 # 데이터셋 경로
-folder_path = "/home/HyoChan/RC_CAR/images"
-left_path = os.path.join(folder_path, "Left")
-right_path = os.path.join(folder_path, "Right")
-straight_path = os.path.join(folder_path, "Straight")
+folder_path = "/home/pi/RC_CAR/images"
 
 # 데이터 로드 및 전처리
 img_size = (64, 64)  # 이미지 크기
 
-def load_images_from_folder(folder, label):
+def load_images(folder, label_keyword):
     images = []
     labels = []
     for filename in os.listdir(folder):
         file_path = os.path.join(folder, filename)
         if os.path.isfile(file_path):
-            img = cv2.imread(file_path, cv2.IMREAD_GRAYSCALE)  # 흑백 이미지로 읽기
-            img = cv2.resize(img, img_size)  # 크기 조정
-            images.append(img)
-            labels.append(label)
+            if label_keyword.lower() in filename.lower():
+                img = cv2.imread(file_path, cv2.IMREAD_GRAYSCALE)  # 흑백 이미지로 읽기
+                img = cv2.resize(img, img_size)  # 크기 조정
+                images.append(img)
+                labels.append(label_keyword)
     return images, labels
 
 # 각 방향 데이터 로드
-left_images, left_labels = load_images_from_folder(left_path, 0)  # Left: 0
-right_images, right_labels = load_images_from_folder(right_path, 1)  # Right: 1
-straight_images, straight_labels = load_images_from_folder(straight_path, 2)  # Straight: 2
+left_images, left_labels = load_images(folder_path, "left")  # Left: 0
+right_images, right_labels = load_images(folder_path, "right")  # Right: 1
+straight_images, straight_labels = load_images(folder_path, "straight")  # Straight: 2
 
 # 데이터 합치기
 images = np.array(left_images + right_images + straight_images)
-labels = np.array(left_labels + right_labels + straight_labels)
+labels = np.array([0] * len(left_labels) + [1] * len(right_labels) + [2] * len(straight_labels))
 
 # 정규화
 images = images / 255.0
@@ -75,3 +73,5 @@ model.save("direction_classifier.h5")
 loss, accuracy = model.evaluate(X_test, y_test)
 print(f"테스트 손실: {loss}")
 print(f"테스트 정확도: {accuracy}")
+
+# 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
