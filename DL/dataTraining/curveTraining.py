@@ -27,7 +27,7 @@ dc_motor_pwm = GPIO.PWM(ENA, 100)   # DC 모터: 100Hz PWM
 servo_pwm.start(0)
 dc_motor_pwm.start(0)
 
-current_angle = 45  # 서보모터 초기 각도
+current_angle = 90  # 서보모터 초기 각도
 current_speed = 0   # DC 모터 초기 속도
 
 ANGLE_INCREMENT = 5  # 서보모터 각도 변화량
