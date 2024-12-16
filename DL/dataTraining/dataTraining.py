@@ -27,7 +27,7 @@ dc_motor_pwm.start(30)  # 초기 속도 30
 
 # === 변수 설정 ===
 current_angle = 90  # 서보모터 초기 각도
-current_speed = 30  # DC 모터 초기 속도
+current_speed = 20  # DC 모터 초기 속도
 ANGLE_INCREMENT = 3  # 더 미세한 각도 조정
 SPEED_INCREMENT = 2  # 더 느린 속도 증가
 MAX_SPEED = 50  # 최대 속도를 낮춤
@@ -39,7 +39,7 @@ angle_folders = {
     "straight": range(85, 96),  # 85~95도는 straight 폴더
     "right": range(96, 181)  # 96~180도는 right 폴더
 }
-base_save_path = "/home/HyoChan/RC_CAR/DL/dataTraining/images"
+base_save_path = "/home/RC_CAR/DL/dataTraining/images"
 for folder in angle_folders:
     os.makedirs(os.path.join(base_save_path, folder), exist_ok=True)
 
