@@ -3,11 +3,8 @@ import time
 from pynput import keyboard
 import cv2
 import numpy as np
-import subprocess
-import shlex
 import datetime
 import os
-import threading
 
 # === GPIO 설정 ===
 SERVO_PIN = 12  # 서보모터 핀 번호
@@ -34,9 +31,9 @@ ANGLE_INCREMENT = 5  # 서보모터 각도 변화량
 SPEED_INCREMENT = 5  # 속도 증가 단위
 MAX_SPEED = 100      # DC 모터 최대 속도
 
-# === 폴더 생성 ===
-save_path = "/home/pi/AL_CAR/images"
-os.makedirs(save_path, exist_ok=True)
+# === 이미지 저장 경로 설정 ===
+save_path = "/home/HyoChan/RC_CAR/DL/dataTraining/images"
+os.makedirs(save_path, exist_ok=True)  # 경로가 없으면 생성
 
 # === 서보모터 제어 함수 ===
 def set_servo_angle(angle):
@@ -68,7 +65,7 @@ def save_image(state_name):
 
 # === 키 입력 함수 ===
 def on_press(key):
-    global current_angle, current_speed
+    global current_angle, current_speed, last_capture_time
     try:
         if key == keyboard.Key.up:  # 전진
             motor_forward()
@@ -101,8 +98,24 @@ def on_release(key):
         print("프로그램 종료")
         return False
 
+# === 주기적으로 이미지 저장 ===
+last_capture_time = time.time()
+def periodic_capture():
+    global last_capture_time
+    while True:
+        current_time = time.time()
+        if current_time - last_capture_time >= 2:  # 2초 간격
+            save_image("Periodic")
+            last_capture_time = current_time
+        time.sleep(0.1)  # CPU 부하 최소화
+
 # === 프로그램 실행 ===
 try:
+    # 이미지 캡처를 위한 스레드 실행
+    capture_thread = threading.Thread(target=periodic_capture, daemon=True)
+    capture_thread.start()
+
+    # 키보드 입력 감지
     listener = keyboard.Listener(on_press=on_press, on_release=on_release)
     listener.start()
     listener.join()
