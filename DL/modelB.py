@@ -1,77 +1,29 @@
 import os
-import tensorflow as tf
-from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import Conv2D, MaxPooling2D, Flatten, Dense, Dropout
-from tensorflow.keras.preprocessing.image import ImageDataGenerator
-from sklearn.model_selection import train_test_split
-import numpy as np
-import cv2
+import random
 
-# 데이터셋 경로
-folder_path = "/home/pi/RC_CAR/images"
+# 원본 이미지가 있는 폴더 경로
+folder_path = r"C:\Users\USER\OneDrive\바탕 화면\RC_CAR\Right"
 
-# 데이터 로드 및 전처리
-img_size = (64, 64)  # 이미지 크기
+# 결과 이미지 파일명에 사용할 랜덤 번호 생성
+def rename_images_randomly(folder_path):
+    # 폴더 내의 파일 리스트 가져오기
+    file_list = [file for file in os.listdir(folder_path) if file.endswith(('.png', '.jpg', '.jpeg'))]
 
-def load_images(folder, label_keyword):
-    images = []
-    labels = []
-    for filename in os.listdir(folder):
-        file_path = os.path.join(folder, filename)
-        if os.path.isfile(file_path):
-            if label_keyword.lower() in filename.lower():
-                img = cv2.imread(file_path, cv2.IMREAD_GRAYSCALE)  # 흑백 이미지로 읽기
-                img = cv2.resize(img, img_size)  # 크기 조정
-                images.append(img)
-                labels.append(label_keyword)
-    return images, labels
+    # 파일을 랜덤하게 섞기
+    random.shuffle(file_list)
 
-# 각 방향 데이터 로드
-left_images, left_labels = load_images(folder_path, "left")  # Left: 0
-right_images, right_labels = load_images(folder_path, "right")  # Right: 1
-straight_images, straight_labels = load_images(folder_path, "straight")  # Straight: 2
+    # 번호를 순서대로 붙이며 파일명 변경
+    for idx, filename in enumerate(file_list):
+        # 파일 확장자 추출
+        _, ext = os.path.splitext(filename)
+        # 새로운 파일명 생성
+        new_name = f"Right_{idx + 1}{ext}"
+        # 기존 파일 경로와 새 파일 경로
+        old_path = os.path.join(folder_path, filename)
+        new_path = os.path.join(folder_path, new_name)
+        # 파일명 변경
+        os.rename(old_path, new_path)
+        print(f"Renamed: {filename} -> {new_name}")
 
-# 데이터 합치기
-images = np.array(left_images + right_images + straight_images)
-labels = np.array([0] * len(left_labels) + [1] * len(right_labels) + [2] * len(straight_labels))
-
-# 정규화
-images = images / 255.0
-images = images.reshape(-1, img_size[0], img_size[1], 1)  # 채널 추가
-
-# 데이터셋 분리
-X_train, X_test, y_train, y_test = train_test_split(images, labels, test_size=0.3, random_state=42)
-
-# 모델 정의
-model = Sequential([
-    Conv2D(32, (3, 3), activation='relu', input_shape=(img_size[0], img_size[1], 1)),
-    MaxPooling2D((2, 2)),
-    Dropout(0.25),
-
-    Conv2D(64, (3, 3), activation='relu'),
-    MaxPooling2D((2, 2)),
-    Dropout(0.25),
-
-    Flatten(),
-    Dense(128, activation='relu'),
-    Dropout(0.5),
-    Dense(3, activation='softmax')  # 3개의 클래스 (Left, Right, Straight)
-])
-
-# 모델 컴파일
-model.compile(optimizer='adam',
-              loss='sparse_categorical_crossentropy',
-              metrics=['accuracy'])
-
-# 모델 학습
-history = model.fit(X_train, y_train, epochs=10, validation_data=(X_test, y_test), batch_size=32)
-
-# 모델 저장
-model.save("direction_classifier.h5")
-
-# 결과 출력
-loss, accuracy = model.evaluate(X_test, y_test)
-print(f"테스트 손실: {loss}")
-print(f"테스트 정확도: {accuracy}")
-
-# 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
+# 함수 실행
+rename_images_randomly(folder_path)
