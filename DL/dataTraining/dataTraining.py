@@ -27,7 +27,7 @@ servo_pwm.start(0)
 dc_motor_pwm.start(0)
 
 # 초기값 설정
-current_angle = 90
+current_angle = 45
 current_speed = 0
 
 # 서보모터 각도 설정 함수

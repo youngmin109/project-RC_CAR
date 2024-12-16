@@ -73,5 +73,3 @@ model.save("direction_classifier.h5")
 loss, accuracy = model.evaluate(X_test, y_test)
 print(f"테스트 손실: {loss}")
 print(f"테스트 정확도: {accuracy}")
-
-# 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

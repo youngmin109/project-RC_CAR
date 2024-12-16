@@ -57,16 +57,16 @@ def initialize_servo():
 
 def control_rc_car(predicted_label):
     if predicted_label == 0:  # Left
-        angle = 10
+        angle = 30
         duty_cycle = 5.0  # 대략적인 값 (왼쪽)
     elif predicted_label == 1:  # Right
-        angle = 50
+        angle = 45
         duty_cycle = 10.0  # 대략적인 값 (오른쪽)
     elif predicted_label == 2:  # Straight
-        angle = 30
+        angle = 60
         duty_cycle = 7.5  # 직진 값
     else:
-        angle = 30
+        angle = 45
         duty_cycle = 7.5  # 기본 직진 값
 
     speed = 25  # 기본 직진 속도

@@ -15,7 +15,7 @@ dc_motor = Motor(forward=17, backward=27)  # DC 모터 전진과 후진 핀 설�
 dc_speed = PWMOutputDevice(23)  # ENA 핀에 PWM 신호를 보낼 핀 설정
 
 # 초기 각도와 속도 설정
-servo_angle = 90  # 서보모터 기본 각도 (0~180도 사이)
+servo_angle = 45  # 서보모터 기본 각도 (0~180도 사이)
 dc_motor_speed = 0  # DC 모터 기본 속도 (0~1)
 
 def set_servo_angle(angle):
