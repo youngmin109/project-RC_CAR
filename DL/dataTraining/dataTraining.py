@@ -1,118 +1,115 @@
-import RPi.GPIO as GPIO  # 라즈베리파이 GPIO 라이브러리
+import RPi.GPIO as GPIO
 import time
-import cv2  # OpenCV 사용 예시
+from pynput import keyboard
+import cv2
+import numpy as np
+import subprocess
+import shlex
+import datetime
 import os
+import threading
 
-# GPIO 핀 설정
-SERVO_PIN = 18  # 서보모터 핀 번호 (PWM 제어)
-MOTOR_FORWARD = 23  # 모터 전진 핀
-MOTOR_STOP = 24  # 모터 정지 핀
-MOTOR_LEFT = 25  # 좌회전 핀
-MOTOR_RIGHT = 8  # 우회전 핀
+# === GPIO 설정 ===
+SERVO_PIN = 12  # 서보모터 핀 번호
+IN1 = 17        # DC 모터 전진 방향 제어 핀
+IN2 = 27        # DC 모터 후진 방향 제어 핀
+ENA = 18        # DC 모터 속도 제어 핀 (PWM)
 
-# GPIO 설정
-GPIO.setmode(GPIO.BCM)  # BCM 모드 사용
+GPIO.setmode(GPIO.BCM)  # BCM 핀 번호 사용
 GPIO.setup(SERVO_PIN, GPIO.OUT)
-GPIO.setup([MOTOR_FORWARD, MOTOR_STOP, MOTOR_LEFT, MOTOR_RIGHT], GPIO.OUT)
+GPIO.setup(IN1, GPIO.OUT)
+GPIO.setup(IN2, GPIO.OUT)
+GPIO.setup(ENA, GPIO.OUT)
 
-# PWM 설정
-pwm = GPIO.PWM(SERVO_PIN, 50)  # 50Hz PWM 신호
-pwm.start(0)  # 초기 듀티사이클 0%
+servo_pwm = GPIO.PWM(SERVO_PIN, 50)  # 서보모터 PWM: 50Hz
+dc_motor_pwm = GPIO.PWM(ENA, 100)    # DC 모터 PWM: 100Hz
 
-# 초기값 설정
-angle = 90  # 초기 서보모터 각도
-step = 5    # 각도 변경 단위
-speedSet = 50  # 속도 값
-current_time = time.time()
+servo_pwm.start(0)
+dc_motor_pwm.start(30)  # 초기 속도 30으로 설정
 
-# 이미지 저장 폴더 설정
-if not os.path.exists("images"):
-    os.makedirs("images")
+current_angle = 90  # 서보모터 초기 각도
+current_speed = 30  # DC 모터 초기 속도
 
-# 서보모터 각도 설정 함수
-def set_angle(angle):
-    duty = angle / 18 + 2  # 듀티 사이클 계산 (0도 ~ 180도 범위)
-    GPIO.output(SERVO_PIN, True)
-    pwm.ChangeDutyCycle(duty)
-    time.sleep(0.1)  # 동작 대기 시간
-    GPIO.output(SERVO_PIN, False)
-    pwm.ChangeDutyCycle(0)
+ANGLE_INCREMENT = 5  # 서보모터 각도 변화량
+SPEED_INCREMENT = 5  # 속도 증가 단위
+MAX_SPEED = 100      # DC 모터 최대 속도
 
-# 모터 제어 함수
-def motor_go():
-    GPIO.output(MOTOR_FORWARD, GPIO.HIGH)
-    GPIO.output([MOTOR_STOP, MOTOR_LEFT, MOTOR_RIGHT], GPIO.LOW)
-    print("Motor: Forward")
+# === 폴더 생성 ===
+save_path = "/home/pi/AL_CAR/images"
+os.makedirs(save_path, exist_ok=True)
+
+# === 서보모터 제어 함수 ===
+def set_servo_angle(angle):
+    duty = 2 + (angle / 18)  # 각도 → 듀티사이클 변환
+    servo_pwm.ChangeDutyCycle(duty)
+    time.sleep(0.1)
+    servo_pwm.ChangeDutyCycle(0)
+
+# === DC 모터 제어 함수 ===
+def motor_forward():
+    GPIO.output(IN1, GPIO.HIGH)
+    GPIO.output(IN2, GPIO.LOW)
+    dc_motor_pwm.ChangeDutyCycle(current_speed)
+    print(f"전진: 속도 {current_speed}%")
 
 def motor_stop():
-    GPIO.output([MOTOR_FORWARD, MOTOR_STOP, MOTOR_LEFT, MOTOR_RIGHT], GPIO.LOW)
-    print("Motor: Stop")
+    GPIO.output(IN1, GPIO.LOW)
+    GPIO.output(IN2, GPIO.LOW)
+    dc_motor_pwm.ChangeDutyCycle(0)
+    print("모터 정지")
 
-def motor_turn_left():
-    GPIO.output(MOTOR_LEFT, GPIO.HIGH)
-    GPIO.output([MOTOR_FORWARD, MOTOR_STOP, MOTOR_RIGHT], GPIO.LOW)
-    print("Motor: Turn Left")
-
-def motor_turn_right():
-    GPIO.output(MOTOR_RIGHT, GPIO.HIGH)
-    GPIO.output([MOTOR_FORWARD, MOTOR_STOP, MOTOR_LEFT], GPIO.LOW)
-    print("Motor: Turn Right")
-
-# 이미지 저장 함수
+# === 이미지 저장 함수 ===
 def save_image(state_name):
-    img_name = f"images/{int(time.time())}_{state_name}.jpg"
-    img = camera.capture()  # 이미지 캡처 함수 (카메라 모듈에 맞게 수정 필요)
-    cv2.imwrite(img_name, img)
-    print(f"Saved: {img_name}")
+    now = datetime.datetime.now().strftime('%y%m%d_%H%M%S')
+    filename = os.path.join(save_path, f"{now}_{state_name}.jpg")
+    img = np.zeros((720, 1280, 3), dtype=np.uint8)  # 예시 이미지 생성 (카메라 연동 필요)
+    cv2.imwrite(filename, img)
+    print(f"이미지 저장: {filename}")
 
-# 메인 루프
+# === 키 입력 함수 ===
+def on_press(key):
+    global current_angle, current_speed
+    try:
+        if key == keyboard.Key.up:  # 전진
+            motor_forward()
+        elif key == keyboard.Key.down:  # 정지
+            motor_stop()
+        elif key == keyboard.Key.left:  # 왼쪽 방향
+            current_angle = max(0, current_angle - ANGLE_INCREMENT)
+            set_servo_angle(current_angle)
+            print(f"서보모터 왼쪽 회전: 각도 {current_angle}도")
+        elif key == keyboard.Key.right:  # 오른쪽 방향
+            current_angle = min(180, current_angle + ANGLE_INCREMENT)
+            set_servo_angle(current_angle)
+            print(f"서보모터 오른쪽 회전: 각도 {current_angle}도")
+        elif key.char == 'z':  # 초기화 및 이미지 저장
+            while current_angle > 90:  # 각도 복귀 (오른쪽 → 중앙)
+                current_angle -= ANGLE_INCREMENT
+                set_servo_angle(current_angle)
+                time.sleep(0.05)
+            while current_angle < 90:  # 각도 복귀 (왼쪽 → 중앙)
+                current_angle += ANGLE_INCREMENT
+                set_servo_angle(current_angle)
+                time.sleep(0.05)
+            print("조향 초기화: 각도 90도")
+            save_image("Straight")  # 이미지 저장
+    except AttributeError:
+        pass
+
+def on_release(key):
+    if key == keyboard.Key.esc:  # ESC 키를 누르면 종료
+        print("프로그램 종료")
+        return False
+
+# === 프로그램 실행 ===
 try:
-    while True:
-        keyValue = cv2.waitKey(0)  # 키 입력 대기
-
-        if keyValue == ord('q'):  # 'q' 종료
-            break
-
-        elif keyValue == 81:  # 왼쪽 방향키: 좌회전
-            if angle > 5:
-                angle -= step
-            set_angle(angle)
-            motor_turn_left()
-            print(f"Left: {angle}")
-
-        elif keyValue == 83:  # 오른쪽 방향키: 우회전
-            if angle < 175:
-                angle += step
-            set_angle(angle)
-            motor_turn_right()
-            print(f"Right: {angle}")
-
-        elif keyValue == ord('z'):  # 'z' 키: 초기화 (90도)
-            while angle < 90:  # 왼쪽에서 돌아올 때
-                angle += step
-                set_angle(angle)
-                time.sleep(0.05)
-            while angle > 90:  # 오른쪽에서 돌아올 때
-                angle -= step
-                set_angle(angle)
-                time.sleep(0.05)
-            motor_stop()
-            save_image("Straight")
-            print("Straight: 90")
-
-        elif keyValue == 82:  # 위쪽 방향키: 전진
-            motor_go()
-
-        elif keyValue == 84:  # 아래쪽 방향키: 정지
-            motor_stop()
-
-        else:
-            print("Invalid Key")
-
+    listener = keyboard.Listener(on_press=on_press, on_release=on_release)
+    listener.start()
+    listener.join()
 except KeyboardInterrupt:
-    print("Program Stopped by User")
-
+    pass
 finally:
-    pwm.stop()
+    servo_pwm.stop()
+    dc_motor_pwm.stop()
     GPIO.cleanup()
-    print("GPIO Cleaned Up")
+    print("프로그램 종료 및 GPIO 정리 완료")
