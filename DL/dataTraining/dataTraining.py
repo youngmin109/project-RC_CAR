@@ -1,7 +1,6 @@
 import RPi.GPIO as GPIO
 import time
 from pynput import keyboard
-import cv2
 import subprocess
 import shlex
 import datetime
@@ -29,16 +28,16 @@ dc_motor_pwm.start(30)  # 초기 속도 30
 # === 변수 설정 ===
 current_angle = 90  # 서보모터 초기 각도
 current_speed = 30  # DC 모터 초기 속도
-ANGLE_INCREMENT = 5
-SPEED_INCREMENT = 5
-MAX_SPEED = 100
-MIN_SPEED = 0
+ANGLE_INCREMENT = 3  # 더 미세한 각도 조정
+SPEED_INCREMENT = 2  # 더 느린 속도 증가
+MAX_SPEED = 50  # 최대 속도를 낮춤
+MIN_SPEED = 10  # 최소 속도 설정
 
-# 조향 각도 범위에 따른 폴더 설정
+# 조향 각도 범위에 따른 폴더 설정 (직진 범위를 더 줄임)
 angle_folders = {
-    "left": range(0, 75),  # 0~74도는 left 폴더
-    "straight": range(75, 106),  # 75~105도는 straight 폴더
-    "right": range(106, 181)  # 106~180도는 right 폴더
+    "left": range(0, 85),  # 0~84도는 left 폴더
+    "straight": range(85, 96),  # 85~95도는 straight 폴더
+    "right": range(96, 181)  # 96~180도는 right 폴더
 }
 base_save_path = "/home/HyoChan/RC_CAR/DL/dataTraining/images"
 for folder in angle_folders:
@@ -48,7 +47,7 @@ for folder in angle_folders:
 def set_servo_angle(angle):
     duty = 2 + (angle / 18)  # 각도 → 듀티사이클 변환
     servo_pwm.ChangeDutyCycle(duty)
-    time.sleep(0.02)  # 조향 떨림 방지: 짧은 대기 시간
+    time.sleep(0.02)  # 조향 떨림 방지
 
 # === DC 모터 제어 함수 ===
 def motor_forward():
@@ -86,7 +85,7 @@ def periodic_capture():
 def on_press(key):
     global current_angle, current_speed
     try:
-        if key == keyboard.Key.up:  # 전진 (속도 5 증가)
+        if key == keyboard.Key.up:  # 전진 (속도 2 증가)
             current_speed = min(current_speed + SPEED_INCREMENT, MAX_SPEED)
             motor_forward()
 
@@ -99,7 +98,7 @@ def on_press(key):
 
         elif key == keyboard.Key.space:  # 정지
             motor_stop()
-            current_speed = 0
+            current_speed = MIN_SPEED  # 정지 후 기본 속도로 초기화
 
         elif key == keyboard.Key.left:  # 왼쪽 방향 (조향 각도 감소)
             current_angle = max(0, current_angle - ANGLE_INCREMENT)
