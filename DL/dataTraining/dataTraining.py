@@ -2,7 +2,6 @@ import RPi.GPIO as GPIO
 import time
 from pynput import keyboard
 import cv2
-import numpy as np
 import subprocess
 import shlex
 import datetime
@@ -35,15 +34,21 @@ SPEED_INCREMENT = 5
 MAX_SPEED = 100
 MIN_SPEED = 0
 
-# === 이미지 저장 경로 ===
-save_path = "/home/HyoChan/RC_CAR/DL/dataTraining/images"
-os.makedirs(save_path, exist_ok=True)
+# 조향 각도 범위에 따른 폴더 설정
+angle_folders = {
+    "left": range(0, 75),  # 0~74도는 left 폴더
+    "straight": range(75, 106),  # 75~105도는 straight 폴더
+    "right": range(106, 181)  # 106~180도는 right 폴더
+}
+base_save_path = "/home/HyoChan/RC_CAR/DL/dataTraining/images"
+for folder in angle_folders:
+    os.makedirs(os.path.join(base_save_path, folder), exist_ok=True)
 
 # === 서보모터 제어 함수 ===
 def set_servo_angle(angle):
     duty = 2 + (angle / 18)  # 각도 → 듀티사이클 변환
     servo_pwm.ChangeDutyCycle(duty)
-    time.sleep(0.05)  # 조향 속도 개선 (부드럽고 빠르게)
+    time.sleep(0.02)  # 조향 떨림 방지: 짧은 대기 시간
 
 # === DC 모터 제어 함수 ===
 def motor_forward():
@@ -52,12 +57,6 @@ def motor_forward():
     dc_motor_pwm.ChangeDutyCycle(current_speed)
     print(f"전진: 속도 {current_speed}%")
 
-def motor_backward():
-    GPIO.output(IN1, GPIO.LOW)
-    GPIO.output(IN2, GPIO.HIGH)
-    dc_motor_pwm.ChangeDutyCycle(current_speed)
-    print(f"후진: 속도 {current_speed}%")
-
 def motor_stop():
     GPIO.output(IN1, GPIO.LOW)
     GPIO.output(IN2, GPIO.LOW)
@@ -65,12 +64,23 @@ def motor_stop():
     print("모터 정지")
 
 # === libcamera를 사용한 이미지 저장 함수 ===
-def save_image(state_name):
+def save_image():
     now = datetime.datetime.now().strftime('%y%m%d_%H%M%S')
-    filename = os.path.join(save_path, f"{now}_{state_name}.jpg")
-    cmd = f"libcamera-still -o {filename} --width 1280 --height 720 --nopreview"
-    subprocess.run(shlex.split(cmd))
-    print(f"이미지 저장: {filename}")
+    # 조향 각도에 따라 저장 폴더 결정
+    for folder, angle_range in angle_folders.items():
+        if current_angle in angle_range:
+            save_path = os.path.join(base_save_path, folder)
+            filename = os.path.join(save_path, f"{now}.jpg")
+            cmd = f"libcamera-still -o {filename} --width 1280 --height 720 --nopreview"
+            subprocess.run(shlex.split(cmd))
+            print(f"이미지 저장: {filename}")
+            break
+
+# === 주기적으로 이미지 저장 ===
+def periodic_capture():
+    while True:
+        save_image()
+        time.sleep(2)  # 2초마다 이미지 저장
 
 # === 키 입력 이벤트 ===
 def on_press(key):
@@ -80,9 +90,12 @@ def on_press(key):
             current_speed = min(current_speed + SPEED_INCREMENT, MAX_SPEED)
             motor_forward()
 
-        elif key == keyboard.Key.down:  # 후진 (속도 5 감소)
+        elif key == keyboard.Key.down:  # 전진 속도 감소
             current_speed = max(current_speed - SPEED_INCREMENT, MIN_SPEED)
-            motor_backward()
+            if current_speed > 0:
+                motor_forward()
+            else:
+                motor_stop()
 
         elif key == keyboard.Key.space:  # 정지
             motor_stop()
@@ -98,17 +111,11 @@ def on_press(key):
             set_servo_angle(current_angle)
             print(f"오른쪽 회전: 각도 {current_angle}도")
 
-        elif key.char == 'z':  # 조향 초기화 및 이미지 저장
+        elif key.char == 'z':  # 조향 초기화
             print("조향 초기화 중...")
-            while current_angle > 90:
-                current_angle -= ANGLE_INCREMENT
-                set_servo_angle(current_angle)
-            while current_angle < 90:
-                current_angle += ANGLE_INCREMENT
-                set_servo_angle(current_angle)
+            current_angle = 90
             set_servo_angle(90)
             print("조향 초기화 완료: 각도 90도")
-            save_image("Straight")  # 이미지 저장
 
     except AttributeError:
         pass
@@ -120,6 +127,11 @@ def on_release(key):
 
 # === 프로그램 실행 ===
 try:
+    # 이미지 캡처 스레드 실행
+    capture_thread = threading.Thread(target=periodic_capture, daemon=True)
+    capture_thread.start()
+
+    # 키보드 입력 감지
     listener = keyboard.Listener(on_press=on_press, on_release=on_release)
     listener.start()
     listener.join()
