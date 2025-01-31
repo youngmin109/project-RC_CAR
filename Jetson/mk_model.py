@@ -1,86 +1,197 @@
-import os  # 파일 및 디렉토리 작업을 위한 os 라이브러리
-import torch  # PyTorch 라이브러리
-import torch.nn as nn  # 신경망 관련 모듈
-import torch.optim as optim  # 최적화 알고리즘 모듈
-from torchvision import datasets, transforms, models  # torchvision을 이용한 데이터셋 및 모델 사용
-from torch.utils.data import DataLoader  # 데이터 로딩을 위한 DataLoader
-import matplotlib.pyplot as plt  # 훈련 결과 시각화를 위한 라이브러리
+import os
+import torch
+import torchvision.transforms as transforms
+from torch.utils.data import DataLoader, random_split
+from torchvision.datasets import ImageFolder
+import torch.nn as nn
+import torch.optim as optim
+import matplotlib.pyplot as plt
 
-# 데이터셋이 저장된 디렉토리 경로 설정
-dataset_dir = "/home/baetani/dataSet"
+# 데이터 경로 및 설정
+DATASET_DIR = "processed_dataset"
+BATCH_SIZE = 64
+EPOCHS = 20
+LEARNING_RATE = 0.0005
+PATIENCE = 5
 
-# 이미지 전처리를 위한 변환(transform) 설정
+# 데이터 전처리
 transform = transforms.Compose([
-    transforms.Resize((224, 224)),  # 모든 이미지를 224x224 크기로 조정 (ResNet의 입력 크기)
-    transforms.ToTensor(),          # 이미지를 Tensor 형식으로 변환 (PyTorch에서 사용 가능하도록 함)
-    transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5])  # 정규화 (픽셀 값을 [-1, 1] 범위로 조정)
+    transforms.Resize((64, 64)),  # 64x64로 리사이즈
+    transforms.ToTensor(),
+    transforms.Normalize([0.5, 0.5, 0.5], [0.5, 0.5, 0.5])  # 정규화
 ])
 
-# ImageFolder를 이용해 데이터셋을 로드 (폴더 구조에 따라 자동으로 라벨 지정)
-train_dataset = datasets.ImageFolder(root=dataset_dir, transform=transform)
+# 데이터셋 로드
+dataset = ImageFolder(DATASET_DIR, transform=transform)
 
-# DataLoader를 사용해 배치 단위로 데이터를 로드
-train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True)
+# 클래스 수 변경 (50~64, 65~79, 80, 81~95, 96~110)
+dataset.classes = ['50~64', '65~79', '80', '81~95', '96~110']
+num_classes = len(dataset.classes)
 
-# 데이터셋의 클래스 개수 확인
-num_classes = len(train_dataset.classes)
-print(f"클래스 개수: {num_classes}")  # 클래스 개수 출력
-print(f"클래스 이름: {train_dataset.classes}")  # 클래스 이름 출력
+# 데이터셋 분할
+data_size = len(dataset)
+train_size = int(0.7 * data_size)
+val_size = int(0.2 * data_size)
+test_size = data_size - train_size - val_size
 
-# 학습에 사용할 디바이스 설정 (CPU 사용)
-device = torch.device("cpu")  # GPU가 아닌 CPU에서 실행하도록 설정
-print(f"Using device: {device}")  # 사용 중인 디바이스 출력
+train_dataset, val_dataset, test_dataset = random_split(dataset, [train_size, val_size, test_size])
 
-# 사전 훈련된 ResNet18 모델 로드 (ImageNet으로 사전 학습됨)
-model = models.resnet18(weights=models.ResNet18_Weights.IMAGENET1K_V1)
+train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True)
+val_loader = DataLoader(val_dataset, batch_size=BATCH_SIZE, shuffle=False)
+test_loader = DataLoader(test_dataset, batch_size=BATCH_SIZE, shuffle=False)
 
-# ResNet의 최종 분류기 부분(fc layer)을 데이터셋 클래스 수에 맞게 수정
-model.fc = nn.Linear(model.fc.in_features, num_classes)
+# CNN 모델 정의
+class CNNModel(nn.Module):
+    def __init__(self, num_classes=5):
+        super(CNNModel, self).__init__()
+        self.conv1 = nn.Conv2d(3, 16, kernel_size=3, stride=1, padding=1)
+        self.conv2 = nn.Conv2d(16, 32, kernel_size=3, stride=1, padding=1)
+        self.conv3 = nn.Conv2d(32, 64, kernel_size=3, stride=1, padding=1)
+        self.pool = nn.MaxPool2d(kernel_size=2, stride=2)
+        self.dropout = nn.Dropout(0.6)
+        self.fc1 = nn.Linear(64 * 8 * 8, 128)
+        self.fc2 = nn.Linear(128, num_classes)
 
-# 모델을 지정된 디바이스로 이동 (CPU에서 실행)
-model = model.to(device)
+    def forward(self, x):
+        x = self.pool(torch.relu(self.conv1(x)))
+        x = self.pool(torch.relu(self.conv2(x)))
+        x = self.pool(torch.relu(self.conv3(x)))
+        x = x.view(-1, 64 * 8 * 8)
+        x = self.dropout(torch.relu(self.fc1(x)))
+        x = self.fc2(x)
+        return x
 
-# 손실 함수 (CrossEntropyLoss: 다중 클래스 분류에서 사용)
+# 모델 초기화
+device = torch.device("cpu")  # CPU 전용 실행
+print(f"Using device: {device}")
+
+model = CNNModel(num_classes=5).to(device)
 criterion = nn.CrossEntropyLoss()
+optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE, weight_decay=1e-3)
+scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=2, verbose=True)
 
-# Adam 최적화 알고리즘 설정 (학습률: 0.001)
-optimizer = optim.Adam(model.parameters(), lr=0.001)
+# 학습 및 검증 함수
+def train_model():
+    best_val_loss = float('inf')
+    patience_counter = 0
 
-# 모델 훈련 설정
-num_epochs = 10  # 총 10번의 학습 반복
-train_loss_history = []  # 학습 과정에서의 손실(loss) 기록 저장 리스트
+    train_losses, val_losses = [], []
+    train_accuracies, val_accuracies = [], []
 
-# 에포크(epochs) 단위로 학습 진행
-for epoch in range(num_epochs):
-    model.train()  # 모델을 학습 모드로 설정
-    running_loss = 0.0  # 에포크별 손실 합 초기화
+    for epoch in range(EPOCHS):
+        model.train()
+        running_loss = 0.0
+        correct = 0
+        total = 0
 
-    # 배치 단위 학습 루프
-    for images, labels in train_loader:
-        images, labels = images.to(device), labels.to(device)  # 데이터를 CPU로 이동
-        
-        optimizer.zero_grad()  # 기울기(gradient) 초기화 (이전 배치의 기울기 제거)
-        outputs = model(images)  # 모델을 통해 예측값 출력
-        loss = criterion(outputs, labels)  # 손실 계산 (예측값과 실제 라벨 비교)
-        loss.backward()  # 역전파 수행 (기울기 계산)
-        optimizer.step()  # 모델 가중치 업데이트
+        for images, labels in train_loader:
+            images, labels = images.to(device), labels.to(device)
 
-        running_loss += loss.item()  # 배치별 손실을 합산
+            optimizer.zero_grad()
+            outputs = model(images)
+            loss = criterion(outputs, labels)
+            loss.backward()
+            optimizer.step()
 
-    # 에포크별 평균 손실 계산
-    avg_loss = running_loss / len(train_loader)
-    train_loss_history.append(avg_loss)  # 손실 기록 저장
-    print(f"Epoch {epoch + 1}/{num_epochs}, Loss: {avg_loss:.4f}")  # 진행 상태 출력
+            running_loss += loss.item() * images.size(0)
+            _, predicted = torch.max(outputs, 1)
+            correct += (predicted == labels).sum().item()
+            total += labels.size(0)
 
-# 훈련된 모델 저장 (CPU 전용 모델로 저장)
-model_save_path = os.path.expanduser("~/trained_model_cpu.pth")  # 모델 저장 경로 지정
-torch.save(model.state_dict(), model_save_path)  # 모델의 가중치(state_dict) 저장
-print(f"모델이 저장되었습니다: {model_save_path}")  # 저장 완료 메시지 출력
+        train_loss = running_loss / len(train_loader.dataset)
+        train_accuracy = correct / total
 
-# 훈련 과정 시각화 (손실 값 그래프)
-plt.plot(range(1, num_epochs + 1), train_loss_history, label='Train Loss')  # 에포크별 손실 값 플롯
-plt.xlabel('Epochs')  # x축 레이블 설정
-plt.ylabel('Loss')  # y축 레이블 설정
-plt.title('Training Loss Trend')  # 그래프 제목 설정
-plt.legend()  # 범례 표시
-plt.show()  # 그래프 출력
+        train_losses.append(train_loss)
+        train_accuracies.append(train_accuracy)
+
+        # 검증 단계
+        model.eval()
+        val_loss = 0.0
+        correct = 0
+        total = 0
+
+        with torch.no_grad():
+            for images, labels in val_loader:
+                images, labels = images.to(device), labels.to(device)
+                outputs = model(images)
+                loss = criterion(outputs, labels)
+                val_loss += loss.item() * images.size(0)
+                _, predicted = torch.max(outputs, 1)
+                correct += (predicted == labels).sum().item()
+                total += labels.size(0)
+
+        val_loss /= len(val_loader.dataset)
+        val_accuracy = correct / total
+
+        val_losses.append(val_loss)
+        val_accuracies.append(val_accuracy)
+
+        print(f"Epoch {epoch + 1}/{EPOCHS}, Training Loss: {train_loss:.4f}, Validation Loss: {val_loss:.4f}, Training Accuracy: {train_accuracy:.4f}, Validation Accuracy: {val_accuracy:.4f}")
+
+        # 학습률 스케줄링
+        scheduler.step(val_loss)
+
+        # 얼리 스토핑
+        if val_loss < best_val_loss:
+            best_val_loss = val_loss
+            patience_counter = 0
+            torch.save(model.state_dict(), "best_model_cpu.pth")
+            print("Model improved, saving model.")
+        else:
+            patience_counter += 1
+            if patience_counter >= PATIENCE:
+                print("Early stopping triggered.")
+                break
+
+    plot_metrics(train_losses, val_losses, train_accuracies, val_accuracies)
+
+# 학습 결과 시각화 함수
+def plot_metrics(train_losses, val_losses, train_accuracies, val_accuracies):
+    epochs = range(1, len(train_losses) + 1)
+
+    plt.figure(figsize=(12, 5))
+
+    # Loss 시각화
+    plt.subplot(1, 2, 1)
+    plt.plot(epochs, train_losses, label='Training Loss')
+    plt.plot(epochs, val_losses, label='Validation Loss')
+    plt.xlabel('Epochs')
+    plt.ylabel('Loss')
+    plt.title('Training and Validation Loss')
+    plt.legend()
+
+    # Accuracy 시각화
+    plt.subplot(1, 2, 2)
+    plt.plot(epochs, train_accuracies, label='Training Accuracy')
+    plt.plot(epochs, val_accuracies, label='Validation Accuracy')
+    plt.xlabel('Epochs')
+    plt.ylabel('Accuracy')
+    plt.title('Training and Validation Accuracy')
+    plt.legend()
+
+    plt.tight_layout()
+    plt.savefig('training_metrics_cpu.png')
+    print("Training metrics saved as 'training_metrics_cpu.png'")
+    plt.show()
+
+# 모델 학습
+if __name__ == "__main__":
+    train_model()
+
+    # 모델 테스트
+    model.load_state_dict(torch.load("best_model_cpu.pth"))
+    model.eval()
+
+    correct = 0
+    total = 0
+
+    with torch.no_grad():
+        for images, labels in test_loader:
+            images, labels = images.to(device), labels.to(device)
+            outputs = model(images)
+            _, predicted = torch.max(outputs, 1)
+            correct += (predicted == labels).sum().item()
+            total += labels.size(0)
+
+    test_accuracy = correct / total
+    print(f"Final Test Accuracy: {test_accuracy:.4f}")
