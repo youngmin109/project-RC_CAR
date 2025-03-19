@@ -15,8 +15,8 @@ Match the number of data for each class -> OverSampling & UnderSampling
 3. 
 Features -> 50, 65, 80, 105, 120
 
-**Failed Model**
+#### **Failed Model**
 ![Failed Model](https://github.com/youngmin109/RC_CAR/blob/main/IMAGE/training_metrics_cpu(ModelA).png)
 
-**Succesed Model**
+#### **Succesed Model**
 ![Succesed Model](https://github.com/youngmin109/RC_CAR/blob/main/IMAGE/training_metrics_cpu(ModelB).png)
