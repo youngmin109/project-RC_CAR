@@ -1,4 +1,4 @@
-### 캡스톤디자인 RC카 제작 프로젝트 
+### 캡스톤디자인 RC카 제작 프로젝트 (계속 업데이트 중)
 This is a collaborative project for building an autonomous RC car.
 
 - **Rasberry Pi5** : 2024.10.1 ~ 2024.12.16 (X)
