@@ -16,7 +16,9 @@ Match the number of data for each class -> OverSampling & UnderSampling
 Features -> 50, 65, 80, 105, 120
 
 #### **Failed Model**
-![Failed Model](https://github.com/youngmin109/RC_CAR/blob/main/IMAGE/training_metrics_cpu(ModelA).png)
+성능 검사 시 손실율 증가, 정확도 감소
+![Succesed Model](https://github.com/youngmin109/RC_CAR/blob/main/IMAGE/training_metrics_cpu(ModelB).png)
 
 #### **Succesed Model**
-![Succesed Model](https://github.com/youngmin109/RC_CAR/blob/main/IMAGE/training_metrics_cpu(ModelB).png)
+검증 데이터로 성능 검사 시에도 손실율이 올라가지 않았다.
+![Failed Model](https://github.com/youngmin109/RC_CAR/blob/main/IMAGE/training_metrics_cpu(ModelA).png)
